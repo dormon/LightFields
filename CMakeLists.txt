@@ -37,6 +37,11 @@ set(INCLUDES
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${INCLUDES})
 
+add_custom_target(
+    run
+    COMMAND ${PROJECT_NAME}
+  )
+
 target_include_directories(${PROJECT_NAME} PUBLIC $<INSTALL_INTERFACE:include>)
 target_include_directories(${PROJECT_NAME} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
 
