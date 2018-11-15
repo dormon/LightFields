@@ -81,7 +81,10 @@ void createProgram(vars::Vars&vars){
   uniform float ySelect = 0.f;
   uniform uint xSize = 8;
   uniform uint ySize = 8;
+uniform float far;
+uniform uvec2 winSize;
   uniform mat4 view;
+  uniform mat4 proj;
   uniform int mode = 0;
   uniform float aspect = 1.f;
   layout(binding=0)uniform sampler2DArray tex;
@@ -93,7 +96,7 @@ void createProgram(vars::Vars&vars){
     if(mode==0){
       xSel = clamp(xSelect,0,xSize-1);
       ySel = clamp(ySelect,0,ySize-1);
-    }else{
+    }else if(mode ==1){
       vec3 camPos = (inverse(view)*vec4(0,0,0,1)).xyz;
       vec3 centerRay = normalize(vec3(0,0,0) - camPos);
       float range = .2;
@@ -101,6 +104,16 @@ void createProgram(vars::Vars&vars){
       float cooy = (clamp(centerRay.y,-range,range)/range+1)/2.;
       xSel = clamp(coox*(xSize-1),0,xSize-1);
       ySel = clamp(cooy*(ySize-1),0,ySize-1);
+    }else if(mode ==2){
+      vec3 camPos = (inverse(view)*vec4(0,0,0,1)).xyz;
+      vec3 pixelPos = (inverse(view)*inverse(proj)*vec4((vCoord.xy / winSize *2 -1)*far,far,far)).xyz;
+      vec3 pixelRay = normalize(pixelPos - camPos);
+
+      float coox = (clamp(pixelRay.x*-1,-range*aspect,range*aspect)/(range*aspect)+1)/2.;
+      float cooy = (clamp(pixelRay.y,-range,range)/range+1)/2.;
+
+	xSel = clamp(coox*(xSize-1),0,xSize-1);
+      	ySel = clamp(cooy*(ySize-1),0,ySize-1);
     }
 
 
@@ -156,7 +169,8 @@ void loadImage(vars::Vars&vars){
   if(notChanged(vars,"all",__FUNCTION__,{}))return;
 
   //auto imgs = getLightFieldImageNames("/media/data/Pavilion/100mm-baseline_8x8-grid/");
-  auto imgs = getLightFieldImageNames("/media/data/Pavilion/200mm-baseline_8x8-grid");
+  //auto imgs = getLightFieldImageNames("/media/data/Pavilion/200mm-baseline_8x8-grid");
+  auto imgs = getLightFieldImageNames("../data/200pav");
   //auto imgs = getLightFieldImageNames("/media/data/Cornell/100mm-baseline_8x8-grid");
   //auto imgs = getLightFieldImageNames("/media/data/Cornell/200mm-baseline_8x8-grid");
   //auto imgs = getLightFieldImageNames("/home/dormon/Desktop/000065");
@@ -186,7 +200,9 @@ void loadImage(vars::Vars&vars){
         data[(y*img.getWidth()+x)*3+2] = p.rgbBlue;
       }
     }
-    tex->setData3D(data.data(),GL_RGB,GL_UNSIGNED_BYTE,0,GL_TEXTURE_2D_ARRAY,0,0,counter++,img.getWidth(),img.getHeight(),1);
+    //tex->setData3D(data.data(),GL_RGB,GL_UNSIGNED_BYTE,0,GL_TEXTURE_2D_ARRAY,0,0,counter++,img.getWidth(),img.getHeight(),1);
+	ge::gl::glTextureSubImage3D(tex->getId(), 0, 0 ,0, counter++, width, height, 1, GL_RGB, GL_UNSIGNED_BYTE, data.data());
+
   }
   vars.addFloat("texture.aspect",(float)width/(float)height);
 }
@@ -203,7 +219,7 @@ void LightFields::init(){
   vars.add<std::map<SDL_Keycode, bool>>("input.keyDown");
   vars.addFloat("xSelect",0.f);
   vars.addFloat("ySelect",0.f);
-  vars.addBool("mode",false);
+  vars.addUint32("mode",0);
   createProgram(vars);
   createCamera(vars);
   loadImage(vars);
@@ -231,9 +247,12 @@ void LightFields::draw(){
   ge::gl::glBindTextureUnit(0,vars.get<ge::gl::Texture>("texture")->getId());
   vars.get<ge::gl::Program>("program")
     ->setMatrix4fv("mvp",glm::value_ptr(projection->getProjection()*view->getView()))
+    ->setMatrix4fv("proj",glm::value_ptr((projection->getProjection())))
+    ->set2uiv("winSize",glm::value_ptr(*vars.get<glm::uvec2>("windowSize")))
     ->set1f("aspect",vars.getFloat("texture.aspect"))
     ->set1f("xSelect",vars.getFloat("xSelect"))
     ->set1f("ySelect",vars.getFloat("ySelect"))
+    ->set1f("far",vars.getFloat("camera.far"))
     ->set1i("mode",vars.getBool("mode"))
     ->setMatrix4fv("view"      ,glm::value_ptr(view->getView()))
     ->use();
