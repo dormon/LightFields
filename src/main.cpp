@@ -112,6 +112,8 @@ uniform uvec2 winSize;
       float coox = (clamp(pixelRay.x*-1,-range*aspect,range*aspect)/(range*aspect)+1)/2.;
       float cooy = (clamp(pixelRay.y,-range,range)/range+1)/2.;
 
+	
+
 	xSel = clamp(coox*(xSize-1),0,xSize-1);
       	ySel = clamp(cooy*(ySize-1),0,ySize-1);
     }
