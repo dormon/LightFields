@@ -70,26 +70,25 @@ void createProgram(vars::Vars&vars){
   uniform float aspect = 1.f;
   out vec2 vCoord;
 
-out mat4 shape;
+//	out mat4 shape;
 
   void main(){
-
-for(int i=0;i<4;i++)
+/*	for(int i=0;i<4;i++)
 	{
     		vec2 v = vec2(i&1,i>>1);
 		shape[i] = mvp*vec4((-1+2*v)*vec2(aspect,1),0,1);
 	}
-
+*/
     vCoord = vec2(gl_VertexID&1,gl_VertexID>>1);
     gl_Position = mvp*vec4((-1+2*vCoord)*vec2(aspect,1),0,1);
   }
   ).";
 	std::string const fsSrc = R".(
   out vec4 fColor;
-
-in mat4 shape;
-
   in vec2 vCoord;
+
+//in mat4 shape;
+
   uniform float xSelect = 0.f;
   uniform float ySelect = 0.f;
   uniform float focusDistance = 0.f;
@@ -109,11 +108,11 @@ uniform uvec2 gridSize = uvec2(8,8);
 		return ((a + u*(direction))).xy*-1;
 	}
 
-
   void main(){
     vec4 c = vec4(0);
     float xSel;
     float ySel;
+
 
     vec2 texCoord = vCoord;
 
@@ -131,31 +130,29 @@ uniform uvec2 gridSize = uvec2(8,8);
     }else if(mode ==2){
       vec3 camPos = (inverse(view)*vec4(0,0,0,1)).xyz;
       vec3 pixelPos = (inverse(view)*inverse(proj)*vec4((vCoord.xy / winSize *2 -1)*far,far,far)).xyz;
-      vec3 pixelRay = pixelPos - camPos;
 
 	xSel = vCoord.x*gridSize.x;
       	ySel = vCoord.y*gridSize.y;
 
+	
 	vec3 normal = vec3(0.0,0.0,1.0);
 	vec3 planePoint = vec3(0.0,0.0,focusDistance);
-	//float u = dot(normal,planePoint-camPos)/dot(normal,pixelRay);
-	//texCoord = ((camPos + u*(pixelRay))).xy*-1;
-texCoord = planeLineInter(camPos, pixelPos, normal, planePoint).xy;
-
-vec2 xRange = vec2(-9999999, 9999999);	
-vec2 yRange = vec2(-9999999, 9999999);	
-for(int i=0; i<4; i++)
+	texCoord = planeLineInter(camPos, pixelPos, normal, planePoint).xy*-1;	
+/*
+	vec2 xRange = vec2(-9999999, 9999999);	
+	vec2 yRange = vec2(-9999999, 9999999);	
+	for(int i=0; i<4; i++)
 	{
-		xRange.s = min(planeLineInter(camPos, shape[i].xyz, normal, planePoint).x, xRange.s);
-		xRange.t = max(planeLineInter(camPos, shape[i].xyz, normal, planePoint).x, xRange.t);
-		yRange.s = min(planeLineInter(camPos, shape[i].xyz, normal, planePoint).y, yRange.s);
-		yRange.t = max(planeLineInter(camPos, shape[i].xyz, normal, planePoint).y, yRange.t);
-	}	
+		xRange.s = vec2(min(planeLineInter(camPos, shape[i].xyz, normal, planePoint).x, xRange.s));
+		xRange.t = vec2(max(planeLineInter(camPos, shape[i].xyz, normal, planePoint).x, xRange.t));
+		yRange.s = vec2(min(planeLineInter(camPos, shape[i].xyz, normal, planePoint).y, yRange.s));
+		yRange.t = vec2(max(planeLineInter(camPos, shape[i].xyz, normal, planePoint).y, yRange.t));
+	}
 
-texCoord.x = (texCoord.x -xRange.s)/(xRange.t-xRange.s)*1920;
-texCoord.y = (texCoord.y -yRange.s)/(yRange.t-yRange.s)*1080;
+	texCoord.x = clamp(texCoord.x, xRange,s, xRange.t);
+	texCoord.y= clamp(texCoord.y yRange,s, yRange.t);
     }
-
+*/
     c += texture(tex,vec3(texCoord,(floor(ySel)  )*gridSize.x+floor(xSel)  )) * (1-fract(xSel)) * (1-fract(ySel));
     c += texture(tex,vec3(texCoord,(floor(ySel)  )*gridSize.x+floor(xSel)+1)) * (  fract(xSel)) * (1-fract(ySel));
     c += texture(tex,vec3(texCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)  )) * (1-fract(xSel)) * (  fract(ySel));
