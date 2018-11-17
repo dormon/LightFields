@@ -70,15 +70,7 @@ void createProgram(vars::Vars&vars){
   uniform float aspect = 1.f;
   out vec2 vCoord;
 
-out mat4 shape;
-
   void main(){
-
-for(int i=0;i<4;i++)
-	{
-    		vec2 v = vec2(i&1,i>>1);
-		shape[i] = mvp*vec4((-1+2*v)*vec2(aspect,1),0,1);
-	}
 
     vCoord = vec2(gl_VertexID&1,gl_VertexID>>1);
     gl_Position = mvp*vec4((-1+2*vCoord)*vec2(aspect,1),0,1);
@@ -86,8 +78,6 @@ for(int i=0;i<4;i++)
   ).";
 	std::string const fsSrc = R".(
   out vec4 fColor;
-
-in mat4 shape;
 
   in vec2 vCoord;
   uniform float xSelect = 0.f;
@@ -107,8 +97,9 @@ uniform uvec2 gridSize = uvec2(8,8);
 		vec3 direction = b-a;
 		float u = dot(normal,p-a)/dot(normal,direction);
 		return ((a + u*(direction))).xy*-1;
+		//float t = (dot(normal,p) - dot(normal,a))/dot(normal, direction);
+		//return vec3(a+direction*t);
 	}
-
 
   void main(){
     vec4 c = vec4(0);
@@ -136,31 +127,42 @@ uniform uvec2 gridSize = uvec2(8,8);
 	xSel = vCoord.x*gridSize.x;
       	ySel = vCoord.y*gridSize.y;
 
+      	float dist = length(vec3(0,0,0) - camPos);
 	vec3 normal = vec3(0.0,0.0,1.0);
 	vec3 planePoint = vec3(0.0,0.0,focusDistance);
-	//float u = dot(normal,planePoint-camPos)/dot(normal,pixelRay);
-	//texCoord = ((camPos + u*(pixelRay))).xy*-1;
 texCoord = planeLineInter(camPos, pixelPos, normal, planePoint).xy;
 
-vec2 xRange = vec2(-9999999, 9999999);	
-vec2 yRange = vec2(-9999999, 9999999);	
+vec3 shape[4];
+for(int i=0;i<4;i++)
+	{
+    		vec2 v = vec2(i&1,i>>1);
+		shape[i] = vec3((-1+2*v)*vec2(aspect,1),0);
+	}
+vec2 xRange = texCoord;	
+vec2 yRange = texCoord;	
 for(int i=0; i<4; i++)
 	{
-		xRange.s = min(planeLineInter(camPos, shape[i].xyz, normal, planePoint).x, xRange.s);
-		xRange.t = max(planeLineInter(camPos, shape[i].xyz, normal, planePoint).x, xRange.t);
-		yRange.s = min(planeLineInter(camPos, shape[i].xyz, normal, planePoint).y, yRange.s);
-		yRange.t = max(planeLineInter(camPos, shape[i].xyz, normal, planePoint).y, yRange.t);
+		vec3 cornerProjection = planeLineInter(camPos, shape[i].xyz, normal, planePoint);
+		xRange.s = min(cornerProjection.x, xRange.s);
+		xRange.t = max(cornerProjection.x, xRange.t);
+		yRange.s = min(cornerProjection.y, yRange.s);
+		yRange.t = max(cornerProjection.y, yRange.t);
 	}	
+texCoord.x = (texCoord.x -xRange.s)/(xRange.t-xRange.s);
+texCoord.y = (texCoord.y -yRange.s)/(yRange.t-yRange.s);
+texCoord = vCoord;
+if(texCoord.x>0.5)
+fColor = vec4(1.0,1.0,1.0,1.0);
+else
+    fColor = vec4(0.0,0.0,0.0,1.0);
 
-texCoord.x = (texCoord.x -xRange.s)/(xRange.t-xRange.s)*1920;
-texCoord.y = (texCoord.y -yRange.s)/(yRange.t-yRange.s)*1080;
-    }
+}
 
     c += texture(tex,vec3(texCoord,(floor(ySel)  )*gridSize.x+floor(xSel)  )) * (1-fract(xSel)) * (1-fract(ySel));
     c += texture(tex,vec3(texCoord,(floor(ySel)  )*gridSize.x+floor(xSel)+1)) * (  fract(xSel)) * (1-fract(ySel));
     c += texture(tex,vec3(texCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)  )) * (1-fract(xSel)) * (  fract(ySel));
     c += texture(tex,vec3(texCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)+1)) * (  fract(xSel)) * (  fract(ySel));
-    fColor = c;
+//    fColor = c;
   }
   ).";
 
@@ -339,7 +341,7 @@ void LightFields::mouseMove(SDL_Event const& e) {
 	auto const xrel           = static_cast<float>(e.motion.xrel);
 	auto const yrel           = static_cast<float>(e.motion.yrel);
 	auto const mState         = e.motion.state;
-	if (mState & SDL_BUTTON_LMASK) {
+	if (mState & SDL_BUTTON_MMASK) {
 		if (orbitCamera) {
 			orbitCamera->addXAngle(yrel * sensitivity);
 			orbitCamera->addYAngle(xrel * sensitivity);
@@ -348,7 +350,7 @@ void LightFields::mouseMove(SDL_Event const& e) {
 	if (mState & SDL_BUTTON_RMASK) {
 		if (orbitCamera) orbitCamera->addDistance(yrel * orbitZoomSpeed);
 	}
-	if (mState & SDL_BUTTON_MMASK) {
+	if (mState & SDL_BUTTON_LMASK) {
 		orbitCamera->addXPosition(+orbitCamera->getDistance() * xrel /
 				float(windowSize->x) * 2.f);
 		orbitCamera->addYPosition(-orbitCamera->getDistance() * yrel /
