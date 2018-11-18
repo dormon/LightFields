@@ -13,6 +13,10 @@
 #include <experimental/filesystem>
 #include <regex>
 
+#include<fstream>
+#include<sstream>
+#include<string>
+
 namespace fs = std::experimental::filesystem;
 
 std::vector<std::string>getDirectoryImages(std::string const&dir){
@@ -65,114 +69,21 @@ class LightFields: public simple3DApp::Application{
 
 void createProgram(vars::Vars&vars){
 
-	std::string const vsSrc = R".(
-  uniform mat4 mvp;
-  uniform float aspect = 1.f;
-  out vec2 vCoord;
-
-  void main(){
-
-    vCoord = vec2(gl_VertexID&1,gl_VertexID>>1);
-    gl_Position = mvp*vec4((-1+2*vCoord)*vec2(aspect,1),0,1);
-  }
-  ).";
-	std::string const fsSrc = R".(
-  out vec4 fColor;
-
-  in vec2 vCoord;
-  uniform float xSelect = 0.f;
-  uniform float ySelect = 0.f;
-  uniform float focusDistance = 0.f;
-uniform float far = 0.0;
-uniform uvec2 winSize = uvec2(0,0);
-  uniform mat4 view = mat4(0.0);
-  uniform mat4 proj = mat4(0.0);
-  uniform int mode = 0;
-  uniform float aspect = 1.f;
-uniform uvec2 gridSize = uvec2(8,8);
-  layout(binding=0)uniform sampler2DArray tex;
-
-	vec3 planeLineInter(vec3 a, vec3 b, vec3 normal, vec3 p)
-	{
-		vec3 direction = b-a;
-		float u = dot(normal,p-a)/dot(normal,direction);
-		return ((a + u*(direction))).xy*-1;
-		//float t = (dot(normal,p) - dot(normal,a))/dot(normal, direction);
-		//return vec3(a+direction*t);
-	}
-
-  void main(){
-    vec4 c = vec4(0);
-    float xSel;
-    float ySel;
-
-    vec2 texCoord = vCoord;
-
-    if(mode==0){
-      xSel = clamp(xSelect,0,gridSize.x-1);
-      ySel = clamp(ySelect,0,gridSize.y-1);
-    }else if(mode ==1){
-      vec3 camPos = (inverse(view)*vec4(0,0,0,1)).xyz;
-      vec3 centerRay = normalize(vec3(0,0,0) - camPos);
-      float range = .2;
-      float coox = (clamp(centerRay.x*-1,-range*aspect,range*aspect)/(range*aspect)+1)/2.;
-      float cooy = (clamp(centerRay.y,-range,range)/range+1)/2.;
-      xSel = clamp(coox*(gridSize.x-1),0,gridSize.x-1);
-      ySel = clamp(cooy*(gridSize.y-1),0,gridSize.y-1);
-    }else if(mode ==2){
-      vec3 camPos = (inverse(view)*vec4(0,0,0,1)).xyz;
-      vec3 pixelPos = (inverse(view)*inverse(proj)*vec4((vCoord.xy / winSize *2 -1)*far,far,far)).xyz;
-      vec3 pixelRay = pixelPos - camPos;
-
-	xSel = vCoord.x*gridSize.x;
-      	ySel = vCoord.y*gridSize.y;
-
-      	float dist = length(vec3(0,0,0) - camPos);
-	vec3 normal = vec3(0.0,0.0,1.0);
-	vec3 planePoint = vec3(0.0,0.0,focusDistance);
-texCoord = planeLineInter(camPos, pixelPos, normal, planePoint).xy;
-
-vec3 shape[4];
-for(int i=0;i<4;i++)
-	{
-    		vec2 v = vec2(i&1,i>>1);
-		shape[i] = vec3((-1+2*v)*vec2(aspect,1),0);
-	}
-vec2 xRange = texCoord;	
-vec2 yRange = texCoord;	
-for(int i=0; i<4; i++)
-	{
-		vec3 cornerProjection = planeLineInter(camPos, shape[i].xyz, normal, planePoint);
-		xRange.s = min(cornerProjection.x, xRange.s);
-		xRange.t = max(cornerProjection.x, xRange.t);
-		yRange.s = min(cornerProjection.y, yRange.s);
-		yRange.t = max(cornerProjection.y, yRange.t);
-	}	
-texCoord.x = (texCoord.x -xRange.s)/(xRange.t-xRange.s);
-texCoord.y = (texCoord.y -yRange.s)/(yRange.t-yRange.s);
-texCoord = vCoord;
-if(texCoord.x>0.5)
-fColor = vec4(1.0,1.0,1.0,1.0);
-else
-    fColor = vec4(0.0,0.0,0.0,1.0);
-
-}
-
-    c += texture(tex,vec3(texCoord,(floor(ySel)  )*gridSize.x+floor(xSel)  )) * (1-fract(xSel)) * (1-fract(ySel));
-    c += texture(tex,vec3(texCoord,(floor(ySel)  )*gridSize.x+floor(xSel)+1)) * (  fract(xSel)) * (1-fract(ySel));
-    c += texture(tex,vec3(texCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)  )) * (1-fract(xSel)) * (  fract(ySel));
-    c += texture(tex,vec3(texCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)+1)) * (  fract(xSel)) * (  fract(ySel));
-//    fColor = c;
-  }
-  ).";
+	std::ifstream vss("../src/shader/vertex.vert");
+	std::ifstream fss("../src/shader/fragment.frag");
+	std::stringstream buffer;
+	buffer << vss.rdbuf();
 
 	auto vs = std::make_shared<ge::gl::Shader>(GL_VERTEX_SHADER,
 			"#version 450\n",
-			vsSrc
+			buffer.str()
 			);
+
+	buffer.str("");	
+	buffer << fss.rdbuf();
 	auto fs = std::make_shared<ge::gl::Shader>(GL_FRAGMENT_SHADER,
 			"#version 450\n",
-			fsSrc
+			buffer.str()
 			);
 	vars.reCreate<ge::gl::Program>("program",vs,fs);
 }
@@ -245,6 +156,9 @@ void loadImage(vars::Vars&vars){
 		//tex->setData3D(data.data(),GL_RGB,GL_UNSIGNED_BYTE,0,GL_TEXTURE_2D_ARRAY,0,0,counter++,img.getWidth(),img.getHeight(),1);
 		//ge::gl::glTextureSubImage3D(tex->getId(), 0, 0 ,0, counter++, width, height, 1, GL_RGB, GL_UNSIGNED_BYTE, data.data());
 		ge::gl::glTextureSubImage3D(tex->getId(), 0, 0 ,0, counter++, width, height, 1, GL_BGR, GL_UNSIGNED_BYTE, (void*)FreeImage_GetBits(img));
+		tex->texParameteri(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+		tex->texParameteri(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+//    ge::gl::glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	}
 	vars.addFloat("texture.aspect",(float)width/(float)height);
 }
@@ -261,7 +175,7 @@ void LightFields::init(){
 	vars.add<std::map<SDL_Keycode, bool>>("input.keyDown");
 	vars.addFloat("xSelect",0.f);
 	vars.addFloat("ySelect",0.f);
-	vars.addFloat("focusDistance",100.f);
+	vars.addFloat("focusDistance",1.f);
 	vars.addUint32("mode",2);
 	createProgram(vars);
 	createCamera(vars);
@@ -288,6 +202,7 @@ void LightFields::draw(){
 	drawGrid(vars);
 
 	ge::gl::glBindTextureUnit(0,vars.get<ge::gl::Texture>("texture")->getId());
+	
 	vars.get<ge::gl::Program>("program")
 		->setMatrix4fv("mvp",glm::value_ptr(projection->getProjection()*view->getView()))
 		->set1f("aspect",vars.getFloat("texture.aspect"))
@@ -341,7 +256,7 @@ void LightFields::mouseMove(SDL_Event const& e) {
 	auto const xrel           = static_cast<float>(e.motion.xrel);
 	auto const yrel           = static_cast<float>(e.motion.yrel);
 	auto const mState         = e.motion.state;
-	if (mState & SDL_BUTTON_MMASK) {
+	if (mState & SDL_BUTTON_LMASK) {
 		if (orbitCamera) {
 			orbitCamera->addXAngle(yrel * sensitivity);
 			orbitCamera->addYAngle(xrel * sensitivity);
@@ -350,7 +265,7 @@ void LightFields::mouseMove(SDL_Event const& e) {
 	if (mState & SDL_BUTTON_RMASK) {
 		if (orbitCamera) orbitCamera->addDistance(yrel * orbitZoomSpeed);
 	}
-	if (mState & SDL_BUTTON_LMASK) {
+	if (mState & SDL_BUTTON_MMASK) {
 		orbitCamera->addXPosition(+orbitCamera->getDistance() * xrel /
 				float(windowSize->x) * 2.f);
 		orbitCamera->addYPosition(-orbitCamera->getDistance() * yrel /

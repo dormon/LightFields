@@ -1,0 +1,84 @@
+out vec4 fColor;
+in vec2 vCoord;
+uniform float xSelect = 0.f;
+uniform float ySelect = 0.f;
+uniform float focusDistance = 0.f;
+uniform float far = 0.0;
+uniform uvec2 winSize = uvec2(0,0);
+uniform mat4 view = mat4(0.0);
+uniform mat4 proj = mat4(0.0);
+uniform int mode = 0;
+uniform float aspect = 1.f;
+uniform uvec2 gridSize = uvec2(8,8);
+layout(binding=0)uniform sampler2DArray tex;
+vec3 planeLineInter(vec3 a, vec3 b, vec3 normal, vec3 p)
+{
+	vec3 direction = b-a;
+	float u = dot(normal,p-a)/dot(normal,direction);
+	return ((a + u*(direction))).xy*-1;
+	//float t = (dot(normal,p) - dot(normal,a))/dot(normal, direction);
+	//return vec3(a+direction*t);
+}
+void main(){
+	vec4 c = vec4(0);
+	float xSel;
+	float ySel;
+	vec2 texCoord = vCoord;
+	if(mode==0){
+		xSel = clamp(xSelect,0,gridSize.x-1);
+		ySel = clamp(ySelect,0,gridSize.y-1);
+	}else if(mode ==1){
+		vec3 camPos = (inverse(view)*vec4(0,0,0,1)).xyz;
+		vec3 centerRay = normalize(vec3(0,0,0) - camPos);
+		float range = .2;
+		float coox = (clamp(centerRay.x*-1,-range*aspect,range*aspect)/(range*aspect)+1)/2.;
+		float cooy = (clamp(centerRay.y,-range,range)/range+1)/2.;
+		xSel = clamp(coox*(gridSize.x-1),0,gridSize.x-1);
+		ySel = clamp(cooy*(gridSize.y-1),0,gridSize.y-1);
+	}else if(mode ==2){
+		vec3 camPos = (inverse(view)*vec4(0,0,0,1)).xyz;
+		vec3 pixelPos = (inverse(view)*inverse(proj)*vec4((gl_FragCoord.xy / winSize *2 -1)*far,far,far)).xyz;
+		vec3 pixelRay = pixelPos - camPos;
+		float dist =camPos.z;// length(vec3(0,0,0) - camPos);
+		vec3 normal = vec3(0.0,0.0,1.0);
+
+		float fd = focusDistance+dist;
+		vec3 planePoint = vec3(0.0,1.0,fd);
+		texCoord = planeLineInter(camPos, pixelPos, normal, planePoint).xy;
+		texCoord.x /= 1.59;
+
+		xSel = vCoord.x*gridSize.x;// + clamp(dist, 0.0, 10.0)*0.1*(0.5-vCoord.x);
+		ySel = vCoord.y*gridSize.y;// + clamp(dist, 0.0, 10.0)*0.1*(0.5-vCoord.y);
+		/*vec3 shape[4];
+		for(int i=0;i<4;i++)
+		{
+			vec2 v = vec2(i&1,i>>1);
+			shape[i] = vec3((-1+2*v)*vec2(aspect,1),0);
+		}
+		vec2 xRange = texCoord;	
+		vec2 yRange = texCoord;	
+		for(int i=0; i<4; i++)
+		{
+			vec3 cornerProjection = planeLineInter(camPos, shape[i].xyz, normal, planePoint);
+			xRange.s = min(cornerProjection.x, xRange.s);
+			xRange.t = max(cornerProjection.x, xRange.t);
+			yRange.s = min(cornerProjection.y, yRange.s);
+			yRange.t = max(cornerProjection.y, yRange.t);
+		}*/
+//		
+
+//		vec2 yRange = vec2(-10.0,10.0);
+			
+//		texCoord.x = (texCoord.x -xRange.s)/(xRange.t-xRange.s);
+//		texCoord.y = (texCoord.y -yRange.s)/(yRange.t-yRange.s);
+/*		if(texCoord.x>0.0)
+			fColor = vec4(1.0,1.0,1.0,1.0);
+		else
+			fColor = vec4(0.0,0.0,0.0,1.0);*/
+	}
+	c += texture(tex,vec3(texCoord,(floor(ySel)  )*gridSize.x+floor(xSel)  )) * (1-fract(xSel)) * (1-fract(ySel));
+	c += texture(tex,vec3(texCoord,(floor(ySel)  )*gridSize.x+floor(xSel)+1)) * (  fract(xSel)) * (1-fract(ySel));
+	c += texture(tex,vec3(texCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)  )) * (1-fract(xSel)) * (  fract(ySel));
+	c += texture(tex,vec3(texCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)+1)) * (  fract(xSel)) * (  fract(ySel));
+	fColor = c;
+}
