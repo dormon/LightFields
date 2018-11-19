@@ -122,7 +122,11 @@ void loadImage(vars::Vars&vars){
 
 	//auto imgs = getLightFieldImageNames("/media/data/Pavilion/100mm-baseline_8x8-grid/");
 	//auto imgs = getLightFieldImageNames("/media/data/Pavilion/200mm-baseline_8x8-grid");
-	auto imgs = getLightFieldImageNames("../data/200pav");
+	//auto imgs = getLightFieldImageNames("../data/200pav");
+	//auto imgs = getLightFieldImageNames("../data/100class");
+	auto imgs = getLightFieldImageNames("../data/bun");
+	//auto imgs = getLightFieldImageNames("../data/lego");
+	//auto imgs = getLightFieldImageNames("../data/100cornel");
 	//auto imgs = getLightFieldImageNames("/media/data/Cornell/100mm-baseline_8x8-grid");
 	//auto imgs = getLightFieldImageNames("/media/data/Cornell/200mm-baseline_8x8-grid");
 	//auto imgs = getLightFieldImageNames("/home/dormon/Desktop/000065");
@@ -134,8 +138,10 @@ void loadImage(vars::Vars&vars){
 	std::vector<uint8_t>data;
 	ge::gl::Texture*tex;
 	uint32_t counter = 0;
+	
+	std::cout << "Loading images:" << std::endl;
 	for(auto const&i:imgs){
-		//std::cout << i << std::endl;
+		std::cout << '.' << std::flush;
 		img.load(i.c_str());
 		if(width == 0){
 			width = img.getWidth();
@@ -161,6 +167,7 @@ void loadImage(vars::Vars&vars){
 //    ge::gl::glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	}
 	vars.addFloat("texture.aspect",(float)width/(float)height);
+	std::cout << std::endl;
 }
 
 void LightFields::init(){
@@ -172,6 +179,7 @@ void LightFields::init(){
 	vars.addFloat("camera.fovy",glm::half_pi<float>());
 	vars.addFloat("camera.near",.1f);
 	vars.addFloat("camera.far",1000.f);
+	vars.addFloat("scale",1.f);
 	vars.add<std::map<SDL_Keycode, bool>>("input.keyDown");
 	vars.addFloat("xSelect",0.f);
 	vars.addFloat("ySelect",0.f);
@@ -179,7 +187,7 @@ void LightFields::init(){
 	vars.addUint32("mode",2);
 	createProgram(vars);
 	createCamera(vars);
-	loadImage(vars);
+	loadImage(vars);	
 }
 
 void LightFields::draw(){
@@ -209,6 +217,7 @@ void LightFields::draw(){
 		->set1f("xSelect",vars.getFloat("xSelect"))
 		->set1f("ySelect",vars.getFloat("ySelect"))
 		->set1f("far",vars.getFloat("camera.far"))
+		->set1f("scale",vars.getFloat("scale"))
 		->set1f("focusDistance",vars.getFloat("focusDistance"))
 		->set1i("mode",vars.getBool("mode"))
 		->set2uiv("winSize",glm::value_ptr(*vars.get<glm::uvec2>("windowSize")))
