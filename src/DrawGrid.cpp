@@ -48,6 +48,7 @@ void createGridProgram(vars::Vars&vars){
 }
 
 void drawGrid(vars::Vars&vars){
+  ge::gl::glDepthMask(GL_FALSE);
   createGridProgram(vars);
   auto view = vars.getReinterpret<basicCamera::CameraTransform>("view");
   auto projection = vars.get<basicCamera::PerspectiveCamera>("projection");
@@ -57,4 +58,5 @@ void drawGrid(vars::Vars&vars){
     ->set1f("far",vars.getFloat("camera.far"))
     ->use();
   ge::gl::glDrawArrays(GL_TRIANGLE_STRIP,0,4);
+  ge::gl::glDepthMask(GL_TRUE);
 }
