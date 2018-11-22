@@ -78,7 +78,6 @@ public:
 
 void createProgram(vars::Vars&vars)
 {
-
     std::ifstream ifs("../src/shader/lf.vert");
     std::stringstream buffer;
     buffer << ifs.rdbuf();
@@ -140,30 +139,21 @@ void createCamera(vars::Vars&vars)
     createView(vars);
 }
 
-
-
-void loadImage(vars::Vars&vars)
+void loadLfImage(vars::Vars&vars, const char* path, bool depth)
 {
-    if(notChanged(vars,"all",__FUNCTION__, {}))return;
+    //if(notChanged(vars,"all",__FUNCTION__, {}))return;
 
-    //auto imgs = getLightFieldImageNames("/media/data/Pavilion/100mm-baseline_8x8-grid/");
-    //auto imgs = getLightFieldImageNames("/media/data/Pavilion/200mm-baseline_8x8-grid");
-    auto imgs = getLightFieldImageNames("../data/200pav");
-    //auto imgs = getLightFieldImageNames("../data/100class");
-    //auto imgs = getLightFieldImageNames("../data/bun");
-    //auto imgs = getLightFieldImageNames("../data/lego");
-    //auto imgs = getLightFieldImageNames("../data/100cornel");
-    //auto imgs = getLightFieldImageNames("/media/data/Cornell/100mm-baseline_8x8-grid");
-    //auto imgs = getLightFieldImageNames("/media/data/Cornell/200mm-baseline_8x8-grid");
-    //auto imgs = getLightFieldImageNames("/home/dormon/Desktop/000065");
+    auto imgs = getLightFieldImageNames(path);
 
     fipImage img;
     FIBITMAP* bm;
     uint32_t width = 0;
     uint32_t height = 0;
-    std::vector<uint8_t>data;
     ge::gl::Texture*tex;
     uint32_t counter = 0;
+	uint32_t format = GL_RGB8;
+	uint32_t type = GL_UNSIGNED_BYTE;
+	uint32_t loadFormat = GL_BGR;
 
     std::cout << "Loading images:" << std::endl;
     for(auto const&i:imgs)
@@ -174,62 +164,70 @@ void loadImage(vars::Vars&vars)
         {
             width = img.getWidth();
             height = img.getHeight();
-            tex = vars.reCreate<ge::gl::Texture>("texture",GL_TEXTURE_2D_ARRAY,GL_RGB8,1,width,height,imgs.size());
-            data.resize(width*height*3);
+			std::string name = "texture";
+			if(!depth)
+			{
+				name = "texture.color";
+			}
+			else
+			{
+				name = "texture.depth";
+				type = GL_FLOAT;
+				format = GL_R16F;
+				loadFormat = GL_RED;
+			}
+           tex = vars.reCreate<ge::gl::Texture>(name.c_str(),GL_TEXTURE_2D_ARRAY,format,1,width,height,imgs.size());
         }
 
-        /*for(size_t y=0;y<height;++y){
-        	for(size_t x=0;x<width;++x){
-        		RGBQUAD p;
-        		img.getPixelColor(x,y,&p);
-        		data[(y*img.getWidth()+x)*3+0] = p.rgbRed;
-        		data[(y*img.getWidth()+x)*3+1] = p.rgbGreen;
-        		data[(y*img.getWidth()+x)*3+2] = p.rgbBlue;
-        	}
-        }*/
-        //tex->setData3D(data.data(),GL_RGB,GL_UNSIGNED_BYTE,0,GL_TEXTURE_2D_ARRAY,0,0,counter++,img.getWidth(),img.getHeight(),1);
-        //ge::gl::glTextureSubImage3D(tex->getId(), 0, 0 ,0, counter++, width, height, 1, GL_RGB, GL_UNSIGNED_BYTE, data.data());
-        ge::gl::glTextureSubImage3D(tex->getId(), 0, 0,0, counter++, width, height, 1, GL_BGR, GL_UNSIGNED_BYTE, (void*)FreeImage_GetBits(img));
+        ge::gl::glTextureSubImage3D(tex->getId(), 0, 0,0, counter++, width, height, 1, loadFormat, type, (void*)FreeImage_GetBits(img));
         tex->texParameteri(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
         tex->texParameteri(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-//    ge::gl::glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     }
-    vars.addFloat("texture.aspect",(float)width/(float)height);
     std::cout << std::endl;
+
+
+	if(!depth)	
+    	vars.addFloat("texture.aspect",(float)width/(float)height);
+}
+
+void loadTextues(vars::Vars&vars)
+{
+	loadLfImage(vars, "../data/200pav", false);
+	loadLfImage(vars, "../data/200pav/depth", true);
+	
+    fipImage img;
+    img.load("../data/brick.jpg");
+    ge::gl::Texture* geomTex = vars.reCreate<ge::gl::Texture>("geomTexture",GL_TEXTURE_2D,GL_RGB8,1,img.getWidth(), img.getHeight());
+    ge::gl::glTextureSubImage2D(geomTex->getId(), 0, 0,0,img.getWidth(), img.getHeight(), GL_BGR, GL_UNSIGNED_BYTE, (void*)FreeImage_GetBits(img));
 }
 
 void loadGeometry(vars::Vars&vars)
 {
-    vars.add<ge::gl::VertexArray>("vao");
-    auto vao = vars.get<ge::gl::VertexArray>("vao");
+    auto vao = vars.add<ge::gl::VertexArray>("vao");
     vao->bind();
     Assimp::Importer importer;
     const aiScene* scene = importer.ReadFile("../data/untitled.obj", 0);
     enum Attribs {ATTR_POSITION=0, ATTR_NORMAL, ATTR_UV};
-    unsigned int vbo[3];
-    ge::gl::glCreateBuffers(3, vbo);
+ 
+    auto vbo = vars.add<ge::gl::Buffer>("vboPos",scene->mMeshes[0]->mNumVertices*sizeof(aiVector3D), scene->mMeshes[0]->mVertices);
+	vao->addAttrib(vbo,ATTR_POSITION,3,GL_FLOAT);
+    vbo = vars.add<ge::gl::Buffer>("vboNorm",scene->mMeshes[0]->mNumVertices*sizeof(aiVector3D), scene->mMeshes[0]->mNormals);
+	vao->addAttrib(vbo,ATTR_NORMAL,3,GL_FLOAT);
 
-    ge::gl::glNamedBufferData(vbo[ATTR_POSITION], scene->mMeshes[0]->mNumVertices*sizeof(aiVector3D), scene->mMeshes[0]->mVertices, GL_STATIC_DRAW);
-    ge::gl::glVertexArrayVertexBuffer(vao->getId(), ATTR_POSITION, vbo[ATTR_POSITION], 0, sizeof(aiVector3D));
-    ge::gl::glVertexArrayAttribFormat(vao->getId(), ATTR_POSITION, 3, GL_FLOAT, 0, 0);
-    ge::gl::glEnableVertexArrayAttrib(vao->getId(),ATTR_POSITION);
+	float *texCoords = new float[scene->mMeshes[0]->mNumVertices * 2];
+		for(int i = 0; i < scene->mMeshes[0]->mNumVertices; ++i) {
+			texCoords[i * 2] = scene->mMeshes[0]->mTextureCoords[0][i].x;
+			texCoords[i * 2 + 1] = scene->mMeshes[0]->mTextureCoords[0][i].y;
+		}
 
-    ge::gl::glNamedBufferData(vbo[ATTR_NORMAL], scene->mMeshes[0]->mNumVertices*sizeof(float)*3, scene->mMeshes[0]->mNormals, GL_STATIC_DRAW);
-    ge::gl::glVertexArrayVertexBuffer(vao->getId(), ATTR_NORMAL, vbo[ATTR_NORMAL], 0, sizeof(float)*3);
-    ge::gl::glVertexArrayAttribFormat(vao->getId(), ATTR_NORMAL, 3, GL_FLOAT, 0, 0);
-    ge::gl::glEnableVertexArrayAttrib(vao->getId(),ATTR_NORMAL);
-
-    ge::gl::glNamedBufferData(vbo[ATTR_UV], scene->mMeshes[0]->mNumVertices*sizeof(float)*2, scene->mMeshes[0]->mTextureCoords, GL_STATIC_DRAW);
-    ge::gl::glVertexArrayVertexBuffer(vao->getId(), ATTR_UV, vbo[ATTR_UV], 0, sizeof(float)*2);
-    ge::gl::glVertexArrayAttribFormat(vao->getId(), ATTR_UV, 2, GL_FLOAT, 0, 0);
-    ge::gl::glEnableVertexArrayAttrib(vao->getId(),ATTR_UV);
-
+    vbo = vars.add<ge::gl::Buffer>("vboUv",scene->mMeshes[0]->mNumVertices*sizeof(GL_FLOAT)*2, texCoords);
+	vao->addAttrib(vbo,ATTR_UV,2,GL_FLOAT,2*sizeof(GL_FLOAT),0);
+    //vbo = vars.add<ge::gl::Buffer>("vboUv",scene->mMeshes[0]->mNumVertices*sizeof(aiVector3D), scene->mMeshes[0]->mTextureCoords);
+//	vao->addAttrib(vbo,ATTR_UV,2,GL_FLOAT,3*sizeof(GL_FLOAT),0);
 }
 
 void LightFields::init()
 {
-
-
     vars.add<ge::gl::VertexArray>("emptyVao");
     vars.addFloat("input.sensitivity",0.01f);
     vars.add<glm::uvec2>("windowSize",window->getWidth(),window->getHeight());
@@ -244,13 +242,10 @@ void LightFields::init()
     vars.addUint32("mode",2);
     createProgram(vars);
     createCamera(vars);
-    loadImage(vars);
+    loadTextues(vars);
     loadGeometry(vars);
 
     ge::gl::glEnable(GL_DEPTH_TEST);
-    //ge::gl::glEnable(GL_CULL_FACE);
-    //ge::gl::glCullFace(GL_BACK);
-
 }
 
 void LightFields::draw()
@@ -273,7 +268,9 @@ void LightFields::draw()
 
     drawGrid(vars);
 
-    ge::gl::glBindTextureUnit(0,vars.get<ge::gl::Texture>("texture")->getId());
+    ge::gl::glBindTextureUnit(0,vars.get<ge::gl::Texture>("texture.color")->getId());
+    ge::gl::glBindTextureUnit(1,vars.get<ge::gl::Texture>("texture.depth")->getId());
+    ge::gl::glBindTextureUnit(2,vars.get<ge::gl::Texture>("geomTexture")->getId());
 
     vars.get<ge::gl::Program>("lfProgram")
     ->setMatrix4fv("mvp",glm::value_ptr(projection->getProjection()*view->getView()))
@@ -297,7 +294,8 @@ void LightFields::draw()
     ->set1f("aspect",vars.getFloat("texture.aspect"))
     ->use();
     vars.get<ge::gl::VertexArray>("vao")->bind();
-    ge::gl::glDrawArrays(GL_TRIANGLES,0,1000);
+   
+	 ge::gl::glDrawArrays(GL_TRIANGLES,0,1000);
 
     vars.get<ge::gl::VertexArray>("vao")->unbind();
 
@@ -362,7 +360,6 @@ void LightFields::mouseMove(SDL_Event const& e)
         orbitCamera->addYPosition(-orbitCamera->getDistance() * yrel /
                                   float(windowSize->y) * 2.f);
     }
-
 }
 
 void LightFields::resize(uint32_t x,uint32_t y)

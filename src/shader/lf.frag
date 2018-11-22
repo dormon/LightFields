@@ -12,13 +12,12 @@ uniform int mode = 0;
 uniform float aspect = 1.f;
 uniform uvec2 gridSize = uvec2(8,8);
 layout(binding=0)uniform sampler2DArray tex;
+layout(binding=1)uniform sampler2DArray texDepth;
 vec3 planeLineInter(vec3 a, vec3 b, vec3 normal, vec3 p)
 {
     vec3 direction = b-a;
     float u = dot(normal,p-a)/dot(normal,direction);
-    return ((a + u*(direction))).xy*-1;
-    //float t = (dot(normal,p) - dot(normal,a))/dot(normal, direction);
-    //return vec3(a+direction*t);
+    return ((a + u*(direction))).xy;
 }
 void main()
 {
@@ -49,14 +48,13 @@ void main()
         float dist = camPos.z;//length(vec3(0,0,0) - camPos);
         vec3 normal = vec3(0.0,0.0,1.0);
 
-        float fd = focusDistance+dist;
-        vec3 planePoint = vec3(0.0,0.0,fd);
+        vec3 planePoint = vec3(0.0,0.0,-focusDistance);
         texCoord = planeLineInter(camPos, pixelPos, normal, planePoint).xy;
-        texCoord *= scale;
-        texCoord += 0.5;
+        texCoord += 0.5*scale;
         texCoord.y *= aspect;
 
-        texCoord += camPos.xy;
+		//TODO react to changed position/orientation
+        texCoord /= scale;
 
         xSel = vCoord.x*(gridSize.x-1);
         ySel = vCoord.y*(gridSize.y-1);
@@ -67,4 +65,5 @@ void main()
     c += texture(tex,vec3(texCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)  )) * (1-fract(xSel)) * (  fract(ySel));
     c += texture(tex,vec3(texCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)+1)) * (  fract(xSel)) * (  fract(ySel));
     fColor = c;
+	fColor = vec4(vec3(texture(texDepth, vec3(texCoord,ySel*gridSize.x+xSel)).x),1.0);
 }
