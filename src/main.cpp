@@ -172,8 +172,8 @@ void loadLfImage(vars::Vars&vars, const char* path, bool depth)
 			else
 			{
 				name = "texture.depth";
-				type = GL_FLOAT;
-				format = GL_R16F;
+				type = GL_UNSIGNED_BYTE;
+				format = GL_R8;
 				loadFormat = GL_RED;
 			}
            tex = vars.reCreate<ge::gl::Texture>(name.c_str(),GL_TEXTURE_2D_ARRAY,format,1,width,height,imgs.size());
@@ -188,12 +188,16 @@ void loadLfImage(vars::Vars&vars, const char* path, bool depth)
 
 	if(!depth)	
     	vars.addFloat("texture.aspect",(float)width/(float)height);
+
+    	vars.addFloat("texture.aspect",(float)width/(float)height);
 }
 
 void loadTextues(vars::Vars&vars)
 {
+		
+
 	loadLfImage(vars, "../data/200pav", false);
-	loadLfImage(vars, "../data/200pav/depth", true);
+	loadLfImage(vars, "../data/200pav/depth/conv", true);
 	
     fipImage img;
     img.load("../data/brick.jpg");

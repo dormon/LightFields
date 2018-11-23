@@ -11,8 +11,8 @@ uniform mat4 proj = mat4(0.0);
 uniform int mode = 0;
 uniform float aspect = 1.f;
 uniform uvec2 gridSize = uvec2(8,8);
-layout(binding=0)uniform sampler2DArray tex;
-layout(binding=1)uniform sampler2DArray texDepth;
+layout(binding=1)uniform sampler2DArray tex;
+layout(binding=0)uniform sampler2DArray texDepth;
 vec3 planeLineInter(vec3 a, vec3 b, vec3 normal, vec3 p)
 {
     vec3 direction = b-a;
@@ -65,5 +65,4 @@ void main()
     c += texture(tex,vec3(texCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)  )) * (1-fract(xSel)) * (  fract(ySel));
     c += texture(tex,vec3(texCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)+1)) * (  fract(xSel)) * (  fract(ySel));
     fColor = c;
-	fColor = vec4(vec3(texture(texDepth, vec3(texCoord,ySel*gridSize.x+xSel)).x),1.0);
 }
