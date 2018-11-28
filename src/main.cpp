@@ -188,8 +188,6 @@ void loadLfImage(vars::Vars&vars, const char* path, bool depth)
 
 	if(!depth)	
     	vars.addFloat("texture.aspect",(float)width/(float)height);
-
-    	vars.addFloat("texture.aspect",(float)width/(float)height);
 }
 
 void loadTextues(vars::Vars&vars)
@@ -212,12 +210,10 @@ void loadGeometry(vars::Vars&vars)
     Assimp::Importer importer;
     const aiScene* scene = importer.ReadFile("../data/untitled.obj", 0);
     enum Attribs {ATTR_POSITION=0, ATTR_NORMAL, ATTR_UV};
- 
     auto vbo = vars.add<ge::gl::Buffer>("vboPos",scene->mMeshes[0]->mNumVertices*sizeof(aiVector3D), scene->mMeshes[0]->mVertices);
 	vao->addAttrib(vbo,ATTR_POSITION,3,GL_FLOAT);
     vbo = vars.add<ge::gl::Buffer>("vboNorm",scene->mMeshes[0]->mNumVertices*sizeof(aiVector3D), scene->mMeshes[0]->mNormals);
 	vao->addAttrib(vbo,ATTR_NORMAL,3,GL_FLOAT);
-
 	float *texCoords = new float[scene->mMeshes[0]->mNumVertices * 2];
 		for(int i = 0; i < scene->mMeshes[0]->mNumVertices; ++i) {
 			texCoords[i * 2] = scene->mMeshes[0]->mTextureCoords[0][i].x;
@@ -239,6 +235,7 @@ void LightFields::init()
     vars.addFloat("camera.near",.1f);
     vars.addFloat("camera.far",1000.f);
     vars.addFloat("scale",1.f);
+    vars.addFloat("z",0.f);
     vars.add<std::map<SDL_Keycode, bool>>("input.keyDown");
     vars.addFloat("xSelect",0.f);
     vars.addFloat("ySelect",0.f);
@@ -283,6 +280,7 @@ void LightFields::draw()
     ->set1f("ySelect",vars.getFloat("ySelect"))
     ->set1f("far",vars.getFloat("camera.far"))
     ->set1f("scale",vars.getFloat("scale"))
+    ->set1f("z",vars.getFloat("z"))
     ->set1f("focusDistance",vars.getFloat("focusDistance"))
     ->set1i("mode",vars.getBool("mode"))
     ->set2uiv("winSize",glm::value_ptr(*vars.get<glm::uvec2>("windowSize")))
