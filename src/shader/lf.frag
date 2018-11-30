@@ -41,7 +41,7 @@ void main()
         xSel = clamp(coox*(gridSize.x-1),0,gridSize.x-1);
         ySel = clamp(cooy*(gridSize.y-1),0,gridSize.y-1);
     }
-    else if(mode ==2)
+    else if(mode ==2 || mode ==3)
     {
         xSel = vCoord.x*(gridSize.x-1);
         ySel = vCoord.y*(gridSize.y-1);
@@ -55,27 +55,29 @@ void main()
         vec3 planePoint = vec3(0.0,0.0,-focusDistance);
         vec2 intersCoord = planeLineInter(camPos, pixelPos, normal, planePoint).xy;
 
-		vec4 color = vec4(0.0);
-		for (int i=0; i<4; i++)
-		{		
-			//float z = texture(texDepth, vec3(texCoord, slice)).r;
+        vec4 color = vec4(0.0);
+        for (int i=0; i<4; i++)
+        {
+            //float z = texture(texDepth, vec3(texCoord, slice)).r;
             /*using the same points as color interpolation
                 C------D
                 |      |
                 |      |
                 A------B
             */
-			//float slice = (floor(ySel)+i/2)*gridSize.x+floor(xSel)+i%2;	
-    
-            vec2 neighbour = vec2(floor(xSel)*(1-i%2) + ceil(xSel)*(i%2), floor(ySel)*(1-i/2) + ceil(ySel)*(i/2) );
-            float zn = z/100;
-            texCoord[i] = intersCoord+(vec2(xSel,ySel)-neighbour)*(zn/(1-zn));
+            //float slice = (floor(ySel)+i/2)*gridSize.x+floor(xSel)+i%2;
 
-            texCoord[i] += 0.5*scale;
-			texCoord[i].y *= aspect;
-            texCoord[i] /= scale;
-		}	
-		//TODO react to changed position/orientation
+            vec2 neighbour = vec2(floor(xSel)*(1-i%2) + ceil(xSel)*(i%2), floor(ySel)*(1-i/2) + ceil(ySel)*(i/2) );
+
+		float scaleFactor = (focusDistance+1)*scale;
+	    float zn = z/100;
+	texCoord[i] = intersCoord+(vec2(xSel,ySel)-neighbour)*(zn/(1.0-zn));
+
+            texCoord[i] += 0.5*scaleFactor;
+            texCoord[i] /= scaleFactor;
+            texCoord[i].y *= aspect;
+        }
+        //TODO react to changed position/orientation
     }
     c += texture(tex,vec3(texCoord[0],(floor(ySel)  )*gridSize.x+floor(xSel)  )) * (1-fract(xSel)) * (1-fract(ySel));
     c += texture(tex,vec3(texCoord[1],(floor(ySel)  )*gridSize.x+floor(xSel)+1)) * (  fract(xSel)) * (1-fract(ySel));
