@@ -55,9 +55,10 @@ void main()
         vec3 planePoint = vec3(0.0,0.0,-focusDistance);
         vec2 intersCoord = planeLineInter(camPos, pixelPos, normal, planePoint).xy;
 
-		vec4 color = vec4(0.0);
-		for (int i=0; i<4; i++)
-		{		
+        vec4 color = vec4(0.0);
+        for (int i=0; i<4; i++)
+        {
+            //float z = texture(texDepth, vec3(texCoord, slice)).r;
             /*using the same points as color interpolation
                 C------D
                 |      |
