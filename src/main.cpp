@@ -139,7 +139,7 @@ void createCamera(vars::Vars&vars)
     createView(vars);
 }
 
-void loadLfImage(vars::Vars&vars, const char* path, bool depth)
+int loadLfImage(vars::Vars&vars, const char* path, bool depth)
 {
     //if(notChanged(vars,"all",__FUNCTION__, {}))return;
 
@@ -188,14 +188,16 @@ void loadLfImage(vars::Vars&vars, const char* path, bool depth)
 
 	if(!depth)	
     	vars.addFloat("texture.aspect",(float)width/(float)height);
+
+    return imgs.size();
 }
 
 void loadTextues(vars::Vars&vars)
 {
-		
-
-	loadLfImage(vars, "../data/200pav", false);
-	loadLfImage(vars, "../data/200pav/depth/conv", true);
+	int size = loadLfImage(vars, "../data/pav", false);
+    size = glm::sqrt(size);
+    vars.add<glm::uvec2>("gridSize",glm::uvec2(static_cast<unsigned int>(size)));
+	loadLfImage(vars, "../data/pavd/conv", true);
 	
     fipImage img;
     img.load("../data/brick.jpg");
@@ -236,6 +238,8 @@ void LightFields::init()
     vars.addFloat("camera.far",1000.f);
     vars.addFloat("scale",1.f);
     vars.addFloat("z",0.f);
+    vars.addUint32("kernel",1);
+    vars.addBool("depth",1);
     vars.add<std::map<SDL_Keycode, bool>>("input.keyDown");
     vars.addFloat("xSelect",0.f);
     vars.addFloat("ySelect",0.f);
@@ -281,10 +285,12 @@ void LightFields::draw()
     ->set1f("far",vars.getFloat("camera.far"))
     ->set1f("scale",vars.getFloat("scale"))
     ->set1f("z",vars.getFloat("z"))
+    ->set1i("kernel",vars.getUint32("kernel"))
     ->set1f("focusDistance",vars.getFloat("focusDistance"))
     ->set1i("mode",vars.getBool("mode"))
+    ->set1i("depth",vars.getBool("depth"))
     ->set2uiv("winSize",glm::value_ptr(*vars.get<glm::uvec2>("windowSize")))
-    ->set2uiv("gridSize",glm::value_ptr(glm::uvec2(8,8)))
+    ->set2uiv("gridSize",glm::value_ptr(*vars.get<glm::uvec2>("gridSize")))
     ->setMatrix4fv("view",glm::value_ptr(view->getView()))
     ->setMatrix4fv("proj",glm::value_ptr(projection->getProjection()))
     ->use();
@@ -304,8 +310,8 @@ void LightFields::draw()
     drawImguiVars(vars);
 
     GLint nCurAvailMemoryInKB = 0;
-    ge::gl::glGetIntegerv( GL_TEXTURE_FREE_MEMORY_ATI,
-                           &nCurAvailMemoryInKB );
+    /*ge::gl::glGetIntegerv( GL_TEXTURE_FREE_MEMORY_ATI,
+                           &nCurAvailMemoryInKB );*/
     ImGui::LabelText("freeMemory","%i MB",nCurAvailMemoryInKB / 1024);
     swap();
 }
@@ -333,7 +339,6 @@ void LightFields::mouseMove(SDL_Event const& e)
        0, view->getAngle(0) + yrel * sensitivity);
        }
      */
-
 
     auto sensitivity = vars.getFloat("input.sensitivity");
     auto orbitCamera =

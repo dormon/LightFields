@@ -11,9 +11,9 @@ out vec3 fragmentPosition;
 
 void main()
 {
-	float size = 1.5;
+	float size = 1.79;
 	vec3 position = inPosition*size;
-	position.y-=0.5;
+	position.y-=0.38;
 	position.x *= aspect;
     gl_Position = mvp*vec4(position*size,1.0);
 
