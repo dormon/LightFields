@@ -17,11 +17,11 @@ uniform uvec2 gridSize = uvec2(8,8);
 layout(binding=0)uniform sampler2DArray tex;
 layout(binding=1)uniform sampler2DArray texDepth;
 
-vec2 planeLineInter(vec3 a, vec3 b, vec3 normal, vec3 p)
+vec3 planeLineInter(vec3 a, vec3 b, vec3 normal, vec3 p)
 {
     vec3 direction = b-a;
     float u = dot(normal,p-a)/dot(normal,direction);
-    return ((a + u*(direction))).xy;
+    return ((a + u*(direction)));
 }
 
 void main()
@@ -57,13 +57,17 @@ void main()
         ySel = vCoord.y*(gridSize.y-1);
 
         vec3 camPos = (inverse(view)*vec4(0,0,0,1)).xyz;
-        vec3 pixelPos = (inverse(view)*inverse(proj)*vec4((gl_FragCoord.xy / winSize *2 -1)*far,far,far)).xyz;
+        //vec3 pixelPos = (inverse(view)*inverse(proj)*vec4((gl_FragCoord.xy / winSize *2 -1)*far,far,far)).xyz;
         vec3 pixelRay = pixelPos - camPos;
-        float dist = camPos.z;//length(vec3(0,0,0) - camPos);
         vec3 normal = vec3(0.0,0.0,1.0);
 
         vec3 planePoint = vec3(0.0,0.0,-focusDistance);
         vec2 intersCoord = planeLineInter(camPos, pixelPos, normal, planePoint).xy;
+
+        //TODO pass world coordinates of corners or work in object space
+        vec2 size[2] = {vec2(-1.0,-1.0), vec2(1.0,1.0)};
+              
+        //intersCoord.y *= aspect;
 
         float zn = z/100;
 
@@ -86,16 +90,26 @@ void main()
                 if(depth == 1)
                 {
                     vec2 depthCoord = intersCoord;
-                    depthCoord.y *= aspect;
                     depthCoord.x += 0.5*scale;
                     depthCoord.y += 0.5*scale;
                     depthCoord /= scale;
-                    zn = focusDistance*(1.0-texture(texDepth, vec3(depthCoord, slice)).r)/z;
-                }
-                
-                texCoord[i] = intersCoord+(vec2(xSel,ySel)-neighbour)*(zn/(1-zn));
+                    
+                    float texZ = 0.0;
+                    texZ += texture(texDepth,vec3(depthCoord,(floor(ySel)  )*gridSize.x+floor(xSel)  )).r * (1-fract(xSel)) * (1-fract(ySel));
+                    texZ += texture(texDepth,vec3(depthCoord,(floor(ySel)  )*gridSize.x+floor(xSel)+1)).r * (  fract(xSel)) * (1-fract(ySel));
+                    texZ += texture(texDepth,vec3(depthCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)  )).r * (1-fract(xSel)) * (  fract(ySel));
+                    texZ += texture(texDepth,vec3(depthCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)+1)).r * (  fract(xSel)) * (  fract(ySel));
+                    //texZ = texture(texDepth, vec3(depthCoord, slice)).r;
 
-                texCoord[i].y *= aspect;
+                    zn *= (1.0-texZ);
+                }
+                /*planePoint = vec3(0.0,0.0,-focusDistance*zn);
+                vec3 newIntersCoord = planeLineInter(camPos, pixelPos, normal, planePoint);
+                planePoint = vec3(0.0,0.0,-focusDistance);
+                texCoord[i] = planeLineInter(vec3(neighbour,pixelPos.z), newIntersCoord, normal, planePoint).xy;
+                //texCoord[i] = newIntersCoord.xy;*/
+
+                texCoord[i] = intersCoord+(vec2(xSel,ySel)-neighbour)*(zn/(1.0-zn));
                 texCoord[i].x += 0.5*scale;
                 texCoord[i].y += 0.5*scale;
                 texCoord[i] /= scale;
@@ -117,7 +131,6 @@ void main()
                     if(depth == 1)
                     {
                         vec2 depthCoord = intersCoord;
-                        depthCoord.y *= aspect;
                         depthCoord.x += 0.5*scale;
                         depthCoord.y += 0.5*scale;
                         depthCoord /= scale;
@@ -125,11 +138,10 @@ void main()
                     }
                     
                     vec2 texCoord = intersCoord+(vec2(xSel,ySel)-vec2(x,y))*(zn/(1-zn));
-                    texCoord.y *= aspect;
                     texCoord.x += 0.5*scale;
                     texCoord.y += 0.5*scale;
                     texCoord /= scale;
-                    float weight = 1.0-pow(distance(vec2(x,y), vec2(xSel,ySel)),2)/pow(outDistance,2);
+                    float weight = 1.0-(distance(vec2(x,y), vec2(xSel,ySel)))/(outDistance);
                     c += texture(tex, vec3(texCoord, slice)) * weight;
                 }
 
