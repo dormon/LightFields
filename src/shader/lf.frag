@@ -57,15 +57,13 @@ void main()
         ySel = vCoord.y*(gridSize.y-1);
 
         vec3 camPos = (inverse(view)*vec4(0,0,0,1)).xyz;
-        //vec3 pixelPos = (inverse(view)*inverse(proj)*vec4((gl_FragCoord.xy / winSize *2 -1)*far,far,far)).xyz;
+        vec3 pixelPos = (inverse(view)*inverse(proj)*vec4((gl_FragCoord.xy / winSize *2 -1)*far,far,far)).xyz;
         vec3 pixelRay = pixelPos - camPos;
         vec3 normal = vec3(0.0,0.0,1.0);
 
         vec3 planePoint = vec3(0.0,0.0,-focusDistance);
         vec2 intersCoord = planeLineInter(camPos, pixelPos, normal, planePoint).xy;
 
-        //TODO pass world coordinates of corners or work in object space
-        vec2 size[2] = {vec2(-1.0,-1.0), vec2(1.0,1.0)};
               
         //intersCoord.y *= aspect;
 
@@ -83,9 +81,13 @@ void main()
                     |      |
                     A------B
                 */
-                float slice = (floor(ySel)+i/2)*gridSize.x+floor(xSel)+i%2;	
         
-                vec2 neighbour = vec2(floor(xSel)*(1-i%2) + ceil(xSel)*(i%2), floor(ySel)*(1-i/2) + ceil(ySel)*(i/2) );
+                //vec2 neighbour = vec2(floor(xSel)*(1-i%2) + ceil(xSel)*(i%2), floor(ySel)*(1-i/2) + ceil(ySel)*(i/2) );
+                ivec2 neighbour = ivec2(floor(xSel) + i%2, floor(ySel)+i/2);
+                int modulo = (i+1)%2;
+                int division = i/2;
+                float weight = (modulo+fract(xSel)*(1-modulo*2)) * (1-division+fract(ySel)*(-1+division*2));
+                int slice = neighbour.y*int(gridSize.x)+neighbour.x;
 
                 if(depth == 1)
                 {
@@ -99,25 +101,28 @@ void main()
                     texZ += texture(texDepth,vec3(depthCoord,(floor(ySel)  )*gridSize.x+floor(xSel)+1)).r * (  fract(xSel)) * (1-fract(ySel));
                     texZ += texture(texDepth,vec3(depthCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)  )).r * (1-fract(xSel)) * (  fract(ySel));
                     texZ += texture(texDepth,vec3(depthCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)+1)).r * (  fract(xSel)) * (  fract(ySel));
-                    //texZ = texture(texDepth, vec3(depthCoord, slice)).r;
+                    texZ = texture(texDepth, vec3(depthCoord, slice)).r;
 
-                    zn *= (1.0-texZ);
+                    zn = (1.0-texZ);
                 }
+                
+                //TODO pass world coordinates of corners or work in object space
+                vec2 size[2] = {vec2(-1.0,-1.0), vec2(1.0,1.0)};
+                vec2 neighbourCoord = (((neighbour-0.0)*2.0) / 7.0) -1.0;
+                vec2 co = (((vCoord-0.0)*2.0) / 1.0) -1.0;
+
                 /*planePoint = vec3(0.0,0.0,-focusDistance*zn);
                 vec3 newIntersCoord = planeLineInter(camPos, pixelPos, normal, planePoint);
                 planePoint = vec3(0.0,0.0,-focusDistance);
-                texCoord[i] = planeLineInter(vec3(neighbour,pixelPos.z), newIntersCoord, normal, planePoint).xy;
-                //texCoord[i] = newIntersCoord.xy;*/
-
-                texCoord[i] = intersCoord+(vec2(xSel,ySel)-neighbour)*(zn/(1.0-zn));
+                texCoord[i] = planeLineInter(vec3(neighbourCoord,pixelPos.z), newIntersCoord, normal, planePoint).xy;*/
+                
+                texCoord[i] = intersCoord+(scale*co.xy-scale*neighbourCoord)*(zn/(1.0-zn));
                 texCoord[i].x += 0.5*scale;
                 texCoord[i].y += 0.5*scale;
                 texCoord[i] /= scale;
+                
+                c += vec4(vec3(zn),1.0)*weight;//texture(tex,vec3(texCoord[i],slice)) * weight;
             }
-            c += texture(tex,vec3(texCoord[0],(floor(ySel)  )*gridSize.x+floor(xSel)  )) * (1-fract(xSel)) * (1-fract(ySel));
-            c += texture(tex,vec3(texCoord[1],(floor(ySel)  )*gridSize.x+floor(xSel)+1)) * (  fract(xSel)) * (1-fract(ySel));
-            c += texture(tex,vec3(texCoord[2],(floor(ySel)+1)*gridSize.x+floor(xSel)  )) * (1-fract(xSel)) * (  fract(ySel));
-            c += texture(tex,vec3(texCoord[3],(floor(ySel)+1)*gridSize.x+floor(xSel)+1)) * (  fract(xSel)) * (  fract(ySel));
         }
         else
         {

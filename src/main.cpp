@@ -107,6 +107,9 @@ void createProgram(vars::Vars&vars)
     fs = std::make_shared<ge::gl::Shader>(GL_FRAGMENT_SHADER, "#version 450\n", buffer.str());
 
     vars.reCreate<ge::gl::Program>("geomProgram",vs,fs);
+
+    if(vars.get<ge::gl::Program>("lfProgram")->getLinkStatus() == GL_FALSE)
+        throw std::runtime_error("Cannot link shader program.");
 }
 
 void createView(vars::Vars&vars)
@@ -194,10 +197,10 @@ int loadLfImage(vars::Vars&vars, const char* path, bool depth)
 
 void loadTextues(vars::Vars&vars)
 {
-	int size = loadLfImage(vars, "../data/test", false);
+	int size = loadLfImage(vars, "../data/test2", false);
     size = glm::sqrt(size);
     vars.add<glm::uvec2>("gridSize",glm::uvec2(static_cast<unsigned int>(size)));
-	loadLfImage(vars, "../data/testd", true);
+	loadLfImage(vars, "../data/test2d", true);
 	
     fipImage img;
     img.load("../data/brick.jpg");
