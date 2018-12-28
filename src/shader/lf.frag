@@ -101,13 +101,14 @@ void main()
                 texZ += texture(tex,vec3(depthCoord-vec2(offset, offset),slice)).r * weight;
                 texZ += texture(tex,vec3(depthCoord+vec2(offset, offset),slice)).r * weight;
             }*/
-
+/*
             texZ += texture(texDepth,vec3(depthCoord,(floor(ySel)  )*gridSize.x+floor(xSel)  )).r * (1-fract(xSel)) * (1-fract(ySel));
             texZ += texture(texDepth,vec3(depthCoord,(floor(ySel)  )*gridSize.x+floor(xSel)+1)).r * (  fract(xSel)) * (1-fract(ySel));
             texZ += texture(texDepth,vec3(depthCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)  )).r * (1-fract(xSel)) * (  fract(ySel));
-            texZ += texture(texDepth,vec3(depthCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)+1)).r * (  fract(xSel)) * (  fract(ySel));
+            texZ += texture(texDepth,vec3(depthCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)+1)).r * (  fract(xSel)) * (  fract(ySel));*/
             //texZ = texture(texDepth, vec3(depthCoord, gridSize.x*round(ySel)+round(xSel))).r;
             //texZ = texture(texDepth, vec3(depthCoord, 0)).r;
+            texZ = (vCoord.x < 0.5) ? 0.9 : 0.96;
             zn *= (1.0-texZ);
         }
 
