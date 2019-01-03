@@ -198,11 +198,11 @@ int loadLfImage(vars::Vars&vars, const char* path, bool depth)
 
 void loadTextues(vars::Vars&vars)
 {
-	int size = loadLfImage(vars, "../data/rect", false);
+	int size = loadLfImage(vars, "../data/testing", false);
     size = glm::sqrt(size);
     vars.add<glm::uvec2>("gridSize",glm::uvec2(static_cast<unsigned int>(size)));
 	//loadLfImage(vars, "../data/test2d", true);
-	loadLfImage(vars, "../data/rectd", true);
+	loadLfImage(vars, "../data/testingd", true);
 	
     fipImage img;
     img.load("../data/brick.jpg");
