@@ -65,54 +65,35 @@ void main()
         vec3 planePoint = vec3(0.0,0.0,-focusDistance);
         vec2 intersCoord = planeLineInter(camPos, pixelPos, normal, planePoint).xy;
               
-        intersCoord.y *= aspect;
+      intersCoord.y *= aspect;
 
-        float zn = z/10.0;
-        if(depth == 1)
+        float zn = z*0.01;
+        if(depth ==1)
         {
-            vec2 depthCoord = intersCoord;
-            depthCoord.x += 0.5*scale;
-            depthCoord.y += 0.5*scale;
-            depthCoord /= scale;
-            
-            float texZ = 0.0;
-       /*     for (int i=0; i<4; i++)
-            {
-        
+            float avgZ = 900.0;
+            for (int i=0; i<4; i++)
+            { 
                 ivec2 neighbour = ivec2(floor(xSel) + i%2, floor(ySel)+i/2);
                 int modulo = (i+1)%2;
                 int division = i/2;
-                float weight = (modulo+fract(xSel)*(1-modulo*2)) * (1-division+fract(ySel)*(-1+division*2)) /9.0;
+                float weight = (modulo+fract(xSel)*(1-modulo*2)) * (1-division+fract(ySel)*(-1+division*2));
                 int slice = neighbour.y*int(gridSize.x)+neighbour.x;
-                float offset = 0.01;
-                texZ += texture(tex,vec3(depthCoord,slice)).r * weight;
-                texZ += texture(tex,vec3(depthCoord+vec2(0,offset),slice)).r * weight;
-                texZ += texture(tex,vec3(depthCoord-vec2(offset,0),slice)).r * weight;
-                texZ += texture(tex,vec3(depthCoord-vec2(offset, offset),slice)).r * weight;
-                texZ += texture(tex,vec3(depthCoord+vec2(offset, offset),slice)).r * weight;
-                offset = 0.02;
-                texZ += texture(tex,vec3(depthCoord+vec2(0,offset),slice)).r * weight;
-                texZ += texture(tex,vec3(depthCoord-vec2(offset,0),slice)).r * weight;
-                texZ += texture(tex,vec3(depthCoord-vec2(offset, offset),slice)).r * weight;
-                texZ += texture(tex,vec3(depthCoord+vec2(offset, offset),slice)).r * weight;
-                offset = 0.03;
-                texZ += texture(tex,vec3(depthCoord+vec2(0,offset),slice)).r * weight;
-                texZ += texture(tex,vec3(depthCoord-vec2(offset,0),slice)).r * weight;
-                texZ += texture(tex,vec3(depthCoord-vec2(offset, offset),slice)).r * weight;
-                texZ += texture(tex,vec3(depthCoord+vec2(offset, offset),slice)).r * weight;
-            }*/
-/*
-            texZ += texture(texDepth,vec3(depthCoord,(floor(ySel)  )*gridSize.x+floor(xSel)  )).r * (1-fract(xSel)) * (1-fract(ySel));
-            texZ += texture(texDepth,vec3(depthCoord,(floor(ySel)  )*gridSize.x+floor(xSel)+1)).r * (  fract(xSel)) * (1-fract(ySel));
-            texZ += texture(texDepth,vec3(depthCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)  )).r * (1-fract(xSel)) * (  fract(ySel));
-            texZ += texture(texDepth,vec3(depthCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)+1)).r * (  fract(xSel)) * (  fract(ySel));
-            texZ = max(texture(texDepth,vec3(depthCoord,(floor(ySel)  )*gridSize.x+floor(xSel)+1)).r, texZ);
-            texZ = max(texture(texDepth,vec3(depthCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)  )).r, texZ);
-            texZ = max(texture(texDepth,vec3(depthCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)+1)).r, texZ);*/
-            //texZ = texture(texDepth, vec3(depthCoord, gridSize.x*round(ySel)+round(xSel))).r;
-            //texZ = texture(texDepth, vec3(depthCoord, 0)).r;
-            //texZ = (vCoord.x < 0.5) ? 0.9 : 0.96;
-            zn *= (1.0-texZ);
+       
+                vec2 depthCoord = intersCoord;
+                depthCoord += 0.5*scale;
+                depthCoord /= scale;
+                
+                float kernel = 0.05;
+                float texZ = 999999.0;
+                texZ = min(texture(texDepth,vec3(depthCoord,slice)).r, texZ);
+                texZ = min(texture(texDepth,vec3(vec2(-kernel, -kernel)+depthCoord,slice)).r, texZ);
+                texZ = min(texture(texDepth,vec3(vec2( kernel,  kernel)+depthCoord,slice)).r, texZ);
+                texZ = min(texture(texDepth,vec3(vec2(-kernel,  kernel)+depthCoord,slice)).r, texZ);
+                texZ = min(texture(texDepth,vec3(vec2( kernel, -kernel)+depthCoord,slice)).r, texZ);
+                //avgZ += texZ*weight;
+                avgZ = min(texZ,avgZ);
+            } 
+                zn*=(1.0-avgZ);
         }
 
         if(mode == 2)
@@ -132,34 +113,13 @@ void main()
                 int division = i/2;
                 float weight = (modulo+fract(xSel)*(1-modulo*2)) * (1-division+fract(ySel)*(-1+division*2));
                 int slice = neighbour.y*int(gridSize.x)+neighbour.x;
-       
-                if(depth ==1)
-                {
-                    vec2 depthCoord = intersCoord;
-                    depthCoord.x += 0.5*scale;
-                    depthCoord.y += 0.5*scale;
-                    depthCoord /= scale;
-                    
-                    float texZ = 0.0;
-                    float kernel = 0.07;
-                    texZ =texture(texDepth,vec3(depthCoord,slice)).r;
-                    texZ = min(texture(texDepth,vec3(vec2(-kernel, -kernel)+depthCoord,slice)).r, texZ);
-                    texZ = min(texture(texDepth,vec3(vec2( kernel,  kernel)+depthCoord,slice)).r, texZ);
-                    texZ = min(texture(texDepth,vec3(vec2(-kernel,  kernel)+depthCoord,slice)).r, texZ);
-                    texZ = min(texture(texDepth,vec3(vec2( kernel, -kernel)+depthCoord,slice)).r, texZ);
-                    zn=(1.0-texZ)*0.1*z;
-
-                }
-         
+                
                 texCoord[i] = intersCoord+scale*(vec2(xSel,ySel)-neighbour)*(zn/(1.0-zn));
-                texCoord[i].x += 0.5*scale;
-                texCoord[i].y += 0.5*scale;
+                texCoord[i] += 0.5*scale;
                 texCoord[i] /= scale;
                 
-               texCoord[i] = clamp(texCoord[i],0.0,1.0);
                c += texture(tex,vec3(texCoord[i],slice)) * weight;
-                //c = texture(tex,vec3(texCoord[i],gridSize.x*round(ySel)+round(xSel)));
-                //c += vec4(vec3(zn),1.0)*weight;
+               //c += vec4(vec3(zn),1.0)*weight;
                 //c = vec4(vec3(zn),1.0);
             }
         }

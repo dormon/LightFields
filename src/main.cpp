@@ -176,8 +176,8 @@ int loadLfImage(vars::Vars&vars, const char* path, bool depth)
 			{
 				name = "texture.depth";
 				type = GL_FLOAT;
-				format = GL_RGB16;
-				loadFormat = GL_RGB;
+				format = GL_RGBA16;
+				loadFormat = GL_RGBA;
 			}
            tex = vars.reCreate<ge::gl::Texture>(name.c_str(),GL_TEXTURE_2D_ARRAY,format,1,width,height,imgs.size());
         }
@@ -198,11 +198,10 @@ int loadLfImage(vars::Vars&vars, const char* path, bool depth)
 
 void loadTextues(vars::Vars&vars)
 {
-	int size = loadLfImage(vars, "../data/testing", false);
+	int size = loadLfImage(vars, "../data/t", false);
     size = glm::sqrt(size);
     vars.add<glm::uvec2>("gridSize",glm::uvec2(static_cast<unsigned int>(size)));
-	//loadLfImage(vars, "../data/test2d", true);
-	loadLfImage(vars, "../data/testingd", true);
+	loadLfImage(vars, "../data/td", true);
 	
     fipImage img;
     img.load("../data/brick.jpg");
@@ -244,7 +243,7 @@ void LightFields::init()
     vars.addFloat("scale",1.f);
     vars.addFloat("z",0.f);
     vars.addUint32("kernel",1);
-    vars.addBool("depth",1);
+    vars.addBool("depth",true);
     vars.add<std::map<SDL_Keycode, bool>>("input.keyDown");
     vars.addFloat("xSelect",0.f);
     vars.addFloat("ySelect",0.f);
@@ -287,17 +286,17 @@ void LightFields::draw()
     ->set1f("aspect",vars.getFloat("texture.aspect"))
     ->set1f("xSelect",vars.getFloat("xSelect"))
     ->set1f("ySelect",vars.getFloat("ySelect"))
-    ->set1f("far",vars.getFloat("camera.far"))
+    //->set1f("far",vars.getFloat("camera.far"))
     ->set1f("scale",vars.getFloat("scale"))
     ->set1f("z",vars.getFloat("z"))
     ->set1i("kernel",vars.getUint32("kernel"))
     ->set1f("focusDistance",vars.getFloat("focusDistance"))
     ->set1i("mode",vars.getBool("mode"))
     ->set1i("depth",vars.getBool("depth"))
-    ->set2uiv("winSize",glm::value_ptr(*vars.get<glm::uvec2>("windowSize")))
+    //->set2uiv("winSize",glm::value_ptr(*vars.get<glm::uvec2>("windowSize")))
     ->set2uiv("gridSize",glm::value_ptr(*vars.get<glm::uvec2>("gridSize")))
     ->setMatrix4fv("view",glm::value_ptr(view->getView()))
-    ->setMatrix4fv("proj",glm::value_ptr(projection->getProjection()))
+    //->setMatrix4fv("proj",glm::value_ptr(projection->getProjection()))
     ->use();
     ge::gl::glDrawArrays(GL_TRIANGLE_STRIP,0,4);
     vars.get<ge::gl::VertexArray>("emptyVao")->unbind();
