@@ -176,12 +176,16 @@ int loadLfImage(vars::Vars&vars, const char* path, bool depth)
 			{
 				name = "texture.depth";
 				type = GL_FLOAT;
-				format = GL_RGBA16;
+				format = GL_RGBA32F;
 				loadFormat = GL_RGBA;
+
+                /*img.convertToGrayscale();
+	            type = GL_UNSIGNED_BYTE;
+                format = GL_R8;
+                loadFormat = GL_RED;*/
 			}
            tex = vars.reCreate<ge::gl::Texture>(name.c_str(),GL_TEXTURE_2D_ARRAY,format,1,width,height,imgs.size());
         }
-
         //tex->setData3D((void*)FreeImage_GetBits(img),loadFormat,type,0,GL_TEXTURE_2D_ARRAY,0,0,counter++,width,height,1);
         ge::gl::glTextureSubImage3D(tex->getId(), 0, 0,0, counter++, width, height, 1, loadFormat, type, (void*)FreeImage_GetBits(img));
         tex->texParameteri(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
@@ -198,10 +202,10 @@ int loadLfImage(vars::Vars&vars, const char* path, bool depth)
 
 void loadTextues(vars::Vars&vars)
 {
-	int size = loadLfImage(vars, "../data/t", false);
+	int size = loadLfImage(vars, "../data/planeTest", false);
     size = glm::sqrt(size);
     vars.add<glm::uvec2>("gridSize",glm::uvec2(static_cast<unsigned int>(size)));
-	loadLfImage(vars, "../data/td", true);
+	loadLfImage(vars, "../data/planeTestd", true);
 	
     fipImage img;
     img.load("../data/brick.jpg");

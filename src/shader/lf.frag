@@ -70,7 +70,7 @@ void main()
         float zn = z*0.01;
         if(depth ==1)
         {
-            float avgZ = 900.0;
+            float avgZ = 0.0;
             for (int i=0; i<4; i++)
             { 
                 ivec2 neighbour = ivec2(floor(xSel) + i%2, floor(ySel)+i/2);
@@ -83,17 +83,23 @@ void main()
                 depthCoord += 0.5*scale;
                 depthCoord /= scale;
                 
-                float kernel = 0.05;
-                float texZ = 999999.0;
-                texZ = min(texture(texDepth,vec3(depthCoord,slice)).r, texZ);
-                texZ = min(texture(texDepth,vec3(vec2(-kernel, -kernel)+depthCoord,slice)).r, texZ);
-                texZ = min(texture(texDepth,vec3(vec2( kernel,  kernel)+depthCoord,slice)).r, texZ);
-                texZ = min(texture(texDepth,vec3(vec2(-kernel,  kernel)+depthCoord,slice)).r, texZ);
-                texZ = min(texture(texDepth,vec3(vec2( kernel, -kernel)+depthCoord,slice)).r, texZ);
-                //avgZ += texZ*weight;
-                avgZ = min(texZ,avgZ);
+                float kernel = xSelect;
+                float texZ = 0.0;
+                texZ = max(texture(texDepth,vec3(depthCoord,slice)).r, texZ);
+                texZ = max(texture(texDepth,vec3(vec2(-kernel, -kernel)+depthCoord,slice)).r, texZ);
+                texZ = max(texture(texDepth,vec3(vec2( kernel,  kernel)+depthCoord,slice)).r, texZ);
+                texZ = max(texture(texDepth,vec3(vec2(-kernel,  kernel)+depthCoord,slice)).r, texZ);
+                texZ = max(texture(texDepth,vec3(vec2( kernel, -kernel)+depthCoord,slice)).r, texZ);
+                texZ = max(texture(texDepth,vec3(vec2( kernel, 0)+depthCoord,slice)).r, texZ);
+                texZ = max(texture(texDepth,vec3(vec2( -kernel, 0)+depthCoord,slice)).r, texZ);
+                texZ = max(texture(texDepth,vec3(vec2( 0, kernel)+depthCoord,slice)).r, texZ);
+                texZ = max(texture(texDepth,vec3(vec2( 0, -kernel)+depthCoord,slice)).r, texZ);
+                avgZ += texZ*weight;
+                avgZ = clamp(avgZ/ySelect,0.0,1.0);
+                //avgZ = min(texZ,avgZ);
+                //avgZ = texture(texDepth,vec3(depthCoord,slice)).r;
             } 
-                zn*=(1.0-avgZ);
+                zn*=(avgZ);
         }
 
         if(mode == 2)
@@ -118,8 +124,8 @@ void main()
                 texCoord[i] += 0.5*scale;
                 texCoord[i] /= scale;
                 
-               c += texture(tex,vec3(texCoord[i],slice)) * weight;
-               //c += vec4(vec3(zn),1.0)*weight;
+                c += texture(tex,vec3(texCoord[i],slice)) * weight;
+                //c += vec4(vec3(zn),1.0)*weight;
                 //c = vec4(vec3(zn),1.0);
             }
         }
@@ -146,6 +152,7 @@ void main()
                 c /= c.w;
         }	
 		//TODO react to changed position/orientation
+        //TODO depth map based blur - DOF
     }
     fColor = c;
 }
