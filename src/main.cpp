@@ -19,6 +19,8 @@
 #include<fstream>
 #include<sstream>
 #include<string>
+#include<thread>
+
 
 namespace fs = std::experimental::filesystem;
 
@@ -202,10 +204,10 @@ int loadLfImage(vars::Vars&vars, const char* path, bool depth)
 
 void loadTextues(vars::Vars&vars)
 {
-	int size = loadLfImage(vars, "../data/planeTest", false);
-    size = glm::sqrt(size);
+	int size = loadLfImage(vars, "../data/video/down", false);
+    size = 8;//glm::sqrt(size);
     vars.add<glm::uvec2>("gridSize",glm::uvec2(static_cast<unsigned int>(size)));
-	loadLfImage(vars, "../data/planeTestd", true);
+	//loadLfImage(vars, "../data/dummy", true);
 	
     fipImage img;
     img.load("../data/brick.jpg");
@@ -224,13 +226,14 @@ void loadGeometry(vars::Vars&vars)
 	vao->addAttrib(vbo,ATTR_POSITION,3,GL_FLOAT);
     vbo = vars.add<ge::gl::Buffer>("vboNorm",scene->mMeshes[0]->mNumVertices*sizeof(aiVector3D), scene->mMeshes[0]->mNormals);
 	vao->addAttrib(vbo,ATTR_NORMAL,3,GL_FLOAT);
-	float *texCoords = new float[scene->mMeshes[0]->mNumVertices * 2];
+	std::vector<float> texCoords;
+    texCoords.reserve(scene->mMeshes[0]->mNumVertices * 2);
 		for(int i = 0; i < scene->mMeshes[0]->mNumVertices; ++i) {
 			texCoords[i * 2] = scene->mMeshes[0]->mTextureCoords[0][i].x;
 			texCoords[i * 2 + 1] = scene->mMeshes[0]->mTextureCoords[0][i].y;
 		}
 
-    vbo = vars.add<ge::gl::Buffer>("vboUv",scene->mMeshes[0]->mNumVertices*sizeof(GL_FLOAT)*2, texCoords);
+    vbo = vars.add<ge::gl::Buffer>("vboUv",scene->mMeshes[0]->mNumVertices*sizeof(GL_FLOAT)*2, texCoords.data());
 	vao->addAttrib(vbo,ATTR_UV,2,GL_FLOAT,2*sizeof(GL_FLOAT),0);
     //vbo = vars.add<ge::gl::Buffer>("vboUv",scene->mMeshes[0]->mNumVertices*sizeof(aiVector3D), scene->mMeshes[0]->mTextureCoords);
 //	vao->addAttrib(vbo,ATTR_UV,2,GL_FLOAT,3*sizeof(GL_FLOAT),0);
@@ -253,6 +256,7 @@ void LightFields::init()
     vars.addFloat("ySelect",0.f);
     vars.addFloat("focusDistance",1.f);
     vars.addUint32("mode",2);
+    vars.addUint32("frame",0);
     createProgram(vars);
     createCamera(vars);
     loadTextues(vars);
@@ -263,6 +267,9 @@ void LightFields::init()
 
 void LightFields::draw()
 {
+
+    auto start = std::chrono::steady_clock::now();
+
     createCamera(vars);
     /*
        auto view = vars.get<basicCamera::FreeLookCamera>("view");
@@ -282,7 +289,7 @@ void LightFields::draw()
     drawGrid(vars);
 
     ge::gl::glBindTextureUnit(0,vars.get<ge::gl::Texture>("texture.color")->getId());
-    ge::gl::glBindTextureUnit(1,vars.get<ge::gl::Texture>("texture.depth")->getId());
+    //ge::gl::glBindTextureUnit(1,vars.get<ge::gl::Texture>("texture.depth")->getId());
     ge::gl::glBindTextureUnit(2,vars.get<ge::gl::Texture>("geomTexture")->getId());
 
     vars.get<ge::gl::Program>("lfProgram")
@@ -296,6 +303,7 @@ void LightFields::draw()
     ->set1i("kernel",vars.getUint32("kernel"))
     ->set1f("focusDistance",vars.getFloat("focusDistance"))
     ->set1i("mode",vars.getBool("mode"))
+    ->set1i("frame",vars.getUint32("frame"))
     ->set1i("depth",vars.getBool("depth"))
     //->set2uiv("winSize",glm::value_ptr(*vars.get<glm::uvec2>("windowSize")))
     ->set2uiv("gridSize",glm::value_ptr(*vars.get<glm::uvec2>("gridSize")))
@@ -322,6 +330,13 @@ void LightFields::draw()
                            &nCurAvailMemoryInKB );*/
     ImGui::LabelText("freeMemory","%i MB",nCurAvailMemoryInKB / 1024);
     swap();
+
+    auto end = std::chrono::steady_clock::now();
+    constexpr int frameTime = 41;
+    int left = frameTime - std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    if(left > 0)
+       std::this_thread::sleep_for(std::chrono::milliseconds(left));
+    vars.getUint32("frame") += (vars.getUint32("frame") == 19) ? -19 : 1; 
 }
 
 void LightFields::key(SDL_Event const& event, bool DOWN)

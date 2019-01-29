@@ -12,6 +12,7 @@ uniform mat4 view = mat4(0.0);
 uniform mat4 proj = mat4(0.0);
 uniform int mode = 0;
 uniform int kernel = 1;
+uniform int frame = 1;
 uniform int depth = 0;
 uniform float aspect = 1.f;
 uniform uvec2 gridSize = uvec2(8,8);
@@ -47,10 +48,12 @@ void main()
             xSel = clamp(coox*(gridSize.x-1),0,gridSize.x-1);
             ySel = clamp(cooy*(gridSize.y-1),0,gridSize.y-1);
         }
-        c += texture(tex,vec3(vCoord,(floor(ySel)  )*gridSize.x+floor(xSel)  )) * (1-fract(xSel)) * (1-fract(ySel));
-        c += texture(tex,vec3(vCoord,(floor(ySel)  )*gridSize.x+floor(xSel)+1)) * (  fract(xSel)) * (1-fract(ySel));
-        c += texture(tex,vec3(vCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)  )) * (1-fract(xSel)) * (  fract(ySel));
-        c += texture(tex,vec3(vCoord,(floor(ySel)+1)*gridSize.x+floor(xSel)+1)) * (  fract(xSel)) * (  fract(ySel));
+
+        uint offset = gridSize.x*gridSize.y*frame;
+        c += texture(tex,vec3(vCoord,offset + (floor(ySel)  )*gridSize.x+floor(xSel)  )) * (1-fract(xSel)) * (1-fract(ySel));
+        c += texture(tex,vec3(vCoord,offset + (floor(ySel)  )*gridSize.x+floor(xSel)+1)) * (  fract(xSel)) * (1-fract(ySel));
+        c += texture(tex,vec3(vCoord,offset + (floor(ySel)+1)*gridSize.x+floor(xSel)  )) * (1-fract(xSel)) * (  fract(ySel));
+        c += texture(tex,vec3(vCoord,offset + (floor(ySel)+1)*gridSize.x+floor(xSel)+1)) * (  fract(xSel)) * (  fract(ySel));
     }
     else if(mode <= 3)
     {
@@ -118,7 +121,7 @@ void main()
                 int modulo = (i+1)%2;
                 int division = i/2;
                 float weight = (modulo+fract(xSel)*(1-modulo*2)) * (1-division+fract(ySel)*(-1+division*2));
-                int slice = neighbour.y*int(gridSize.x)+neighbour.x;
+                int slice = int(gridSize.x*gridSize.y)*frame + (7-neighbour.y)*int(gridSize.x)+neighbour.x;
                 
                 texCoord[i] = intersCoord+scale*(vec2(xSel,ySel)-neighbour)*(zn/(1.0-zn));
                 texCoord[i] += 0.5*scale;
@@ -137,7 +140,7 @@ void main()
             for(int x=center.x-kernel; x<=center.x+kernel; x++)
                 for(int y=center.y-kernel; y<=center.y+kernel; y++)
                 {                    
-                    int slice = y*int(gridSize.x)+x;
+                    int slice = (/*int(gridSize.y)*/7-y)*int(gridSize.x)+x;
                     if(x>(gridSize.x-1) || y>(gridSize.y-1) || x<0 || y<0 )
                         continue;
                     
