@@ -271,14 +271,6 @@ void LightFields::draw()
     auto start = std::chrono::steady_clock::now();
 
     createCamera(vars);
-    /*
-       auto view = vars.get<basicCamera::FreeLookCamera>("view");
-       float freeCameraSpeed = 0.01f;
-       auto keys = vars.get<std::map<SDL_Keycode, bool>>("input.keyDown");
-       for (int a = 0; a < 3; ++a)
-       view->move(a, float((*keys)["d s"[a]] - (*keys)["acw"[a]]) *
-       freeCameraSpeed);
-     */
     auto view = vars.getReinterpret<basicCamera::CameraTransform>("view");
 
     ge::gl::glClearColor(0.1f,0.1f,0.1f,1.f);
@@ -350,19 +342,6 @@ void LightFields::key(SDL_Event const& event, bool DOWN)
 
 void LightFields::mouseMove(SDL_Event const& e)
 {
-    /*
-       auto const xrel           = static_cast<float>(e.motion.xrel);
-       auto const yrel           = static_cast<float>(e.motion.yrel);
-       auto view = vars.get<basicCamera::FreeLookCamera>("view");
-       auto sensitivity = vars.getFloat("input.sensitivity");
-       if (e.motion.state & SDL_BUTTON_LMASK) {
-       view->setAngle(
-       1, view->getAngle(1) + xrel * sensitivity);
-       view->setAngle(
-       0, view->getAngle(0) + yrel * sensitivity);
-       }
-     */
-
     auto sensitivity = vars.getFloat("input.sensitivity");
     auto orbitCamera =
         vars.getReinterpret<basicCamera::OrbitCamera>("view");

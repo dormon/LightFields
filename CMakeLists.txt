@@ -18,34 +18,56 @@ find_package(BasicCamera 1.0 CONFIG REQUIRED)
 find_package(Simple3DApp 1.0.0 CONFIG REQUIRED)
 find_package(Vars CONFIG REQUIRED)
 find_package(assimp CONFIG REQUIRED)
+#find_package(Compressonator CONFIG REQUIRED)
 
 find_package(FreeImage REQUIRED)
 find_package(FreeImagePlus REQUIRED)
 
-set(SOURCES
-  src/main.cpp
-  src/Barrier.cpp
-  src/imguiVars.cpp
-  src/DrawGrid.cpp
+set(SOURCES_RENDER
+  src/render/main.cpp
+  src/render/Barrier.cpp
+  src/render/imguiVars.cpp
+  src/render/DrawGrid.cpp
   )
 
-set(INCLUDES
-  src/Barrier.h
-  src/imguiVars.h
-  src/DrawGrid.h
+set(INCLUDES_RENDER
+  src/render/Barrier.h
+  src/render/imguiVars.h
+  src/render/DrawGrid.h
   )
 
-add_executable(${PROJECT_NAME} ${SOURCES} ${INCLUDES})
+set(SOURCES_CONVERT
+  src/convert/main.cpp
+  src/convert/DDS_Helpers.cpp
+  )
+
+set(INCLUDES_CONVERT
+    src/convert/Compressonator.h
+    src/convert/DDS_Helpers.h
+  )
+
+set(RENDER renderLf)
+set(CONVERT convertLf)
+
+add_executable(${RENDER} ${SOURCES_RENDER} ${INCLUDES_RENDER})
+add_executable(${CONVERT} ${SOURCES_CONVERT} ${INCLUDES_CONVERT})
 
 add_custom_target(
     run
-    COMMAND ${PROJECT_NAME}
+    COMMAND ${RENDER}
   )
 
-target_include_directories(${PROJECT_NAME} PUBLIC $<INSTALL_INTERFACE:include>)
-target_include_directories(${PROJECT_NAME} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
+target_include_directories(${RENDER} PUBLIC $<INSTALL_INTERFACE:include>)
+target_include_directories(${RENDER} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/render>)
 
-target_link_libraries(${PROJECT_NAME} PUBLIC Simple3DApp::Simple3DApp BasicCamera::BasicCamera ArgumentViewer::ArgumentViewer assimp FreeImage::FreeImage FreeImagePlus::FreeImagePlus Vars::Vars -lstdc++fs)
+target_include_directories(${CONVERT} PUBLIC $<INSTALL_INTERFACE:include>)
+target_include_directories(${CONVERT} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src/convert>)
+target_include_directories(${CONVERT} PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../Compressonator/Compressonator/Header/>)
+
+target_link_libraries(${RENDER} PUBLIC Simple3DApp::Simple3DApp BasicCamera::BasicCamera ArgumentViewer::ArgumentViewer assimp FreeImage::FreeImage FreeImagePlus::FreeImagePlus Vars::Vars -lstdc++fs)
+
+target_link_libraries(${CONVERT} PUBLIC /home/ichlubna/Workspace/lf/render/Compressonator/Compressonator/Make/libCompressonator.a -lHalf -lpthread)
+target_link_libraries(${CONVERT} PUBLIC FreeImage::FreeImage FreeImagePlus::FreeImagePlus)
 
 function(getSharedLibraries out lib cfg)
   #message("getSharedLibraries(${lib} ${cfg})")
@@ -88,8 +110,8 @@ function(getAllSharedLibraries allLibraries app cfg)
   set(${allLibraries} ${allLibs} PARENT_SCOPE)
 endfunction()
 
-getAllSharedLibraries(allDebugSharedLibraries ${PROJECT_NAME} DEBUG)
-getAllSharedLibraries(allReleaseSharedLibraries ${PROJECT_NAME} RELEASE)
+getAllSharedLibraries(allDebugSharedLibraries ${RENDER} DEBUG)
+getAllSharedLibraries(allReleaseSharedLibraries ${RENDER} RELEASE)
 
 #message("SharedDebug  : ${allDebugSharedLibraries}")
 #message("SharedRelease: ${allReleaseSharedLibraries}")
@@ -103,5 +125,5 @@ if(MSVC)
   endforeach()
 endif() 
 
-install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION .)
+install(TARGETS ${RENDER} RUNTIME DESTINATION .)
 install(FILES ${allDebugSharedLibraries} DESTINATION .)
