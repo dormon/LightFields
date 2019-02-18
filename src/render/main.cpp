@@ -12,7 +12,9 @@
 #include<FreeImagePlus.h>
 #include <experimental/filesystem>
 #include <regex>
-
+extern "C" { 
+#include <libavdevice/avdevice.h>
+}
 #include<assimp/Importer.hpp>
 #include <assimp/scene.h>
 
@@ -77,10 +79,9 @@ public:
     virtual void                resize(uint32_t x,uint32_t y) override;
 };
 
-
 void createProgram(vars::Vars&vars)
 {
-    std::ifstream ifs("../src/shader/lf.vert");
+    std::ifstream ifs("../../../src/render/shader/lf.vert");
     std::stringstream buffer;
     buffer << ifs.rdbuf();
     auto vs = std::make_shared<ge::gl::Shader>(GL_VERTEX_SHADER, "#version 450\n", buffer.str());
@@ -88,7 +89,7 @@ void createProgram(vars::Vars&vars)
     ifs.close();
     buffer.str("");
 
-    ifs.open("../src/shader/lf.frag");
+    ifs.open("../../../src/render/shader/lf.frag");
     buffer << ifs.rdbuf();
     auto fs = std::make_shared<ge::gl::Shader>(GL_FRAGMENT_SHADER, "#version 450\n", buffer.str());
 
@@ -97,14 +98,14 @@ void createProgram(vars::Vars&vars)
     ifs.close();
     buffer.str("");
 
-    ifs.open("../src/shader/geom.vert");
+    ifs.open("../../../src/render/shader/geom.vert");
     buffer << ifs.rdbuf();
     vs = std::make_shared<ge::gl::Shader>(GL_VERTEX_SHADER, "#version 450\n", buffer.str());
 
     ifs.close();
     buffer.str("");
 
-    ifs.open("../src/shader/geom.frag");
+    ifs.open("../../../src/render/shader/geom.frag");
     buffer << ifs.rdbuf();
     fs = std::make_shared<ge::gl::Shader>(GL_FRAGMENT_SHADER, "#version 450\n", buffer.str());
 
@@ -202,15 +203,15 @@ int loadLfImage(vars::Vars&vars, const char* path, bool depth)
     return imgs.size();
 }
 
-void loadTextues(vars::Vars&vars)
+void loadTextures(vars::Vars&vars)
 {
-	int size = loadLfImage(vars, "../data/video/down", false);
+	int size = loadLfImage(vars, "../../../data/pav", false);
     size = 8;//glm::sqrt(size);
     vars.add<glm::uvec2>("gridSize",glm::uvec2(static_cast<unsigned int>(size)));
 	//loadLfImage(vars, "../data/dummy", true);
 	
     fipImage img;
-    img.load("../data/brick.jpg");
+    img.load("../../../data/brick.jpg");
     ge::gl::Texture* geomTex = vars.reCreate<ge::gl::Texture>("geomTexture",GL_TEXTURE_2D,GL_RGB8,1,img.getWidth(), img.getHeight());
     ge::gl::glTextureSubImage2D(geomTex->getId(), 0, 0,0,img.getWidth(), img.getHeight(), GL_BGR, GL_UNSIGNED_BYTE, (void*)FreeImage_GetBits(img));
 }
@@ -220,7 +221,7 @@ void loadGeometry(vars::Vars&vars)
     auto vao = vars.add<ge::gl::VertexArray>("vao");
     vao->bind();
     Assimp::Importer importer;
-    const aiScene* scene = importer.ReadFile("../data/untitled.obj", 0);
+    const aiScene* scene = importer.ReadFile("../../../data/untitled.obj", 0);
     enum Attribs {ATTR_POSITION=0, ATTR_NORMAL, ATTR_UV};
     auto vbo = vars.add<ge::gl::Buffer>("vboPos",scene->mMeshes[0]->mNumVertices*sizeof(aiVector3D), scene->mMeshes[0]->mVertices);
 	vao->addAttrib(vbo,ATTR_POSITION,3,GL_FLOAT);
@@ -237,6 +238,48 @@ void loadGeometry(vars::Vars&vars)
 	vao->addAttrib(vbo,ATTR_UV,2,GL_FLOAT,2*sizeof(GL_FLOAT),0);
     //vbo = vars.add<ge::gl::Buffer>("vboUv",scene->mMeshes[0]->mNumVertices*sizeof(aiVector3D), scene->mMeshes[0]->mTextureCoords);
 //	vao->addAttrib(vbo,ATTR_UV,2,GL_FLOAT,3*sizeof(GL_FLOAT),0);
+}
+
+void loadVideoFrames(const char *path)
+{
+    AVFormatContext *formatContext = avformat_alloc_context();
+    if(!formatContext)
+        throw std::runtime_error("Cannot allocate format context memory");
+
+    if(avformat_open_input(&formatContext, path, NULL, NULL) != 0)
+        throw std::runtime_error("Cannot open the video file"); 
+
+    if(avformat_find_stream_info(formatContext, NULL) < 0)
+        throw std::runtime_error("Cannot get the stream info");
+
+    AVCodec *codec;
+    int videoStreamId = av_find_best_stream(formatContext, AVMEDIA_TYPE_VIDEO, -1, -1, &codec, 0);
+    if(videoStreamId < 0)
+        throw std::runtime_error("No video stream available");
+    if(!codec)
+        throw std::runtime_error("No suitable codec found");
+    
+    AVCodecContext *codecContext = avcodec_alloc_context3(codec);
+    if(!codecContext)
+        throw std::runtime_error("Cannot allocate codec context memory");
+
+    if(avcodec_parameters_to_context(codecContext, formatContext->streams[videoStreamId]->codecpar)<0)
+        throw std::runtime_error{"Cannot use the file parameters in context"};
+
+    const AVCodecHWConfig *config;
+    for(int i=0;; i++)
+    {
+        if(!(config = avcodec_get_hw_config(codec, i)))
+            throw std::runtime_error("No HW config for codec");
+        std::cerr << av_hwdevice_get_type_name(config->device_type) << std::endl;
+    }
+
+    AVBufferRef *deviceContext = nullptr;
+    if(av_hwdevice_ctx_create(&deviceContext, config->device_type, NULL, NULL, 0) < 0)
+        throw std::runtime_error("Cannot create HW device");
+    codecContext->hw_device_ctx = av_buffer_ref(deviceContext);
+
+    
 }
 
 void LightFields::init()
@@ -259,8 +302,9 @@ void LightFields::init()
     vars.addUint32("frame",0);
     createProgram(vars);
     createCamera(vars);
-    loadTextues(vars);
+    loadTextures(vars);
     loadGeometry(vars);
+    loadVideoFrames("../../../data/video.mkv");
 
     ge::gl::glEnable(GL_DEPTH_TEST);
 }
@@ -322,13 +366,13 @@ void LightFields::draw()
                            &nCurAvailMemoryInKB );*/
     ImGui::LabelText("freeMemory","%i MB",nCurAvailMemoryInKB / 1024);
     swap();
-
+/*
     auto end = std::chrono::steady_clock::now();
     constexpr int frameTime = 41;
     int left = frameTime - std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     if(left > 0)
        std::this_thread::sleep_for(std::chrono::milliseconds(left));
-    vars.getUint32("frame") += (vars.getUint32("frame") == 19) ? -19 : 1; 
+    vars.getUint32("frame") += (vars.getUint32("frame") == 19) ? -19 : 1; */
 }
 
 void LightFields::key(SDL_Event const& event, bool DOWN)
