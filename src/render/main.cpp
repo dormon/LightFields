@@ -15,7 +15,10 @@
 extern "C" { 
 #include <libavdevice/avdevice.h>
 #include <libavutil/pixdesc.h>
+#include <libavutil/hwcontext_vdpau.h>
+#include <libavcodec/vdpau.h>
 }
+#include <CL/cl.h>
 #include<assimp/Importer.hpp>
 #include <assimp/scene.h>
 
@@ -188,7 +191,7 @@ int loadLfImage(vars::Vars&vars, const char* path, bool depth)
                 format = GL_R8;
                 loadFormat = GL_RED;*/
 			}
-           tex = vars.reCreate<ge::gl::Texture>(name.c_str(),GL_TEXTURE_2D_ARRAY,format,1,width,height,imgs.size());
+            tex = vars.reCreate<ge::gl::Texture>(name.c_str(),GL_TEXTURE_2D_ARRAY,format,1,width,height,imgs.size());
         }
         //tex->setData3D((void*)FreeImage_GetBits(img),loadFormat,type,0,GL_TEXTURE_2D_ARRAY,0,0,counter++,width,height,1);
         ge::gl::glTextureSubImage3D(tex->getId(), 0, 0,0, counter++, width, height, 1, loadFormat, type, (void*)FreeImage_GetBits(img));
@@ -206,7 +209,7 @@ int loadLfImage(vars::Vars&vars, const char* path, bool depth)
 
 void loadTextures(vars::Vars&vars)
 {
-	int size = loadLfImage(vars, "../data/dummy", false);
+	int size = loadLfImage(vars, "../data/pavfhd", false);
     size = 8;//glm::sqrt(size);
     vars.add<glm::uvec2>("gridSize",glm::uvec2(static_cast<unsigned int>(size)));
 	//loadLfImage(vars, "../data/dummy", true);
@@ -242,7 +245,7 @@ void loadGeometry(vars::Vars&vars)
 }
 
 //convert as -c:v libx265 -pix_fmt yuv420p (pix fmt, only 420 avaliable for gpu dec)
-void loadVideoFrames(const char *path)
+void loadVideoFrames(const char *path, vars::Vars&vars)
 {
     AVFormatContext *formatContext = avformat_alloc_context();
     if(!formatContext)
@@ -274,12 +277,14 @@ void loadVideoFrames(const char *path)
     {
         if(!(config = avcodec_get_hw_config(codec, i)))
             throw std::runtime_error("No HW config for codec");
+        //vaapi libva-vdpau-driver for nvidia needed
         else if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX && config->device_type == AV_HWDEVICE_TYPE_VDPAU)
         {   
-                pixFmt = config->pix_fmt;//AV_PIX_FMT_RGB24;
-                //std::cerr << av_get_pix_fmt_name(pixFmt) << std::endl;
+            pixFmt = config->pix_fmt;//AV_PIX_FMT_RGB24;
+            //std::cerr << av_get_pix_fmt_name(pixFmt) << std::endl;
             break;
         }
+        //std::cerr << av_hwdevice_get_type_name(config->device_type) << std::endl;
     }
 
 //default one returns first one that is not hw accel only
@@ -305,7 +310,51 @@ void loadVideoFrames(const char *path)
 
     if(avcodec_open2(codecContext, codec, NULL) < 0)
         throw std::runtime_error("Cannot open codec.");
-    
+
+/*
+    AVBufferRef *avClContext = nullptr;
+                std::vector<char> buff(100);
+                int e;
+    if(e = av_hwdevice_ctx_create_derived(&avClContext, AV_HWDEVICE_TYPE_OPENCL, deviceContext, 0) < 0)
+      {
+                    av_make_error_string(buff.data(), buff.size(),e);
+                    std::cerr<<buff.data() << std::endl;
+                     throw std::runtime_error("Cannot create derived CL context");
+    }*/
+   AVHWDeviceContext *device_ctx = (AVHWDeviceContext*)deviceContext->data;
+   AVVDPAUDeviceContext *k = reinterpret_cast<AVVDPAUDeviceContext*>(device_ctx->hwctx);
+//             AVVDPAUDeviceContext *k = reinterpret_cast<AVVDPAUDeviceContext*>(reinterpret_cast<AVHWDeviceContext*>(deviceContext->data)->hwctx); 
+    ge::gl::glVDPAUInitNV((void*)(uintptr_t)(k->device), (void*)k->get_proc_address);
+    VdpVideoMixerParameter params[] = {
+                VDP_VIDEO_MIXER_PARAMETER_CHROMA_TYPE,
+                VDP_VIDEO_MIXER_PARAMETER_VIDEO_SURFACE_WIDTH,
+                VDP_VIDEO_MIXER_PARAMETER_VIDEO_SURFACE_HEIGHT
+        };
+
+    uint32_t w = 1920;
+    uint32_t h = 1080;
+    VdpChromaType ct = VDP_YCBCR_FORMAT_YV12;
+    void *param_vals[] = {
+                &ct,
+                &w,
+                &h
+        };
+
+    VdpGetProcAddress *get_proc_address = k->get_proc_address;
+    VdpOutputSurface surface;
+    VdpOutputSurfaceCreate *vdp_output_surface_create;
+    get_proc_address(k->device, VDP_FUNC_ID_OUTPUT_SURFACE_CREATE, (void**)&vdp_output_surface_create);
+    vdp_output_surface_create(k->device, VDP_RGBA_FORMAT_B8G8R8A8, w, h, &surface);
+    VdpVideoMixer mixer;
+    VdpVideoMixerCreate *vdp_video_mixer_create;
+    get_proc_address(k->device, VDP_FUNC_ID_VIDEO_MIXER_CREATE, (void**)&vdp_video_mixer_create);
+    vdp_video_mixer_create(k->device, 0, nullptr, 3, params, param_vals, &mixer);
+    VdpVideoMixerRender * vdp_video_mixer_render;
+    get_proc_address(k->device, VDP_FUNC_ID_VIDEO_MIXER_RENDER, (void**)&vdp_video_mixer_render);
+    GLuint tex;
+//  tex = vars.reCreate<ge::gl::Texture>("testTex",GL_TEXTURE_2D,GL_RGBA8,1,1920,1080)->getId();
+    GLvdpauSurfaceNV nvSurf = ge::gl::glVDPAURegisterOutputSurfaceNV((void *)(uintptr_t)surface,GL_TEXTURE_2D,1,&tex);
+
     AVPacket packet;
     while(av_read_frame(formatContext, &packet) == 0)
     {
@@ -336,12 +385,24 @@ void loadVideoFrames(const char *path)
             else if(err < 0)
                 throw std::runtime_error("Cannot receive frame");
 
-            /*
+            if(frame->format == pixFmt)
+            {
+              uint32_t h=0;
+              av_vdpau_get_surface_parameters(codecContext, NULL, NULL, &h);
+                //std::cerr <<h; 
+                
+                if(vdp_video_mixer_render(mixer, VDP_INVALID_HANDLE, nullptr, VDP_VIDEO_MIXER_PICTURE_STRUCTURE_FRAME, 0, nullptr, (VdpVideoSurface)(uintptr_t)frame->data[3], 0, nullptr, nullptr, surface, nullptr, nullptr, 0, nullptr) != VDP_STATUS_OK)
+                    throw std::runtime_error("VDP mixer error!");
+                //ge::gl::glVDPAUMapSurfacesNV (1, &nvSurf);
+                //ge::gl::glVDPAURegisterVideoSurfaceNV(reinterpret_cast<void*>/*(uintptr_t)&*/(frame->data[3]),GL_TEXTURE_2D,4,tex);
+           }
+             
+            /*            
             std::cerr << av_get_pix_fmt_name((AVPixelFormat)frame->format);
             if(frame->format == pixFmt)
                 if(av_hwframe_transfer_data(swFrame, frame,0) < 0)
                     throw std::runtime_error("Cannot transfer data");
-
+              
                 std::vector<char> buff(100);
                 int e;
                 AVPixelFormat *fmts = new AVPixelFormat[100];
@@ -358,6 +419,8 @@ void loadVideoFrames(const char *path)
                  }
                 delete [] fmts;
             */
+
+            
 
             av_frame_free(&frame);
             av_frame_free(&swFrame);
@@ -385,6 +448,7 @@ void LightFields::init()
     vars.addFloat("z",0.f);
     vars.addUint32("kernel",1);
     vars.addBool("depth",true);
+    vars.addBool("printStats",false);
     vars.add<std::map<SDL_Keycode, bool>>("input.keyDown");
     vars.addFloat("xSelect",0.f);
     vars.addFloat("ySelect",0.f);
@@ -395,8 +459,15 @@ void LightFields::init()
     createCamera(vars);
     loadTextures(vars);
     loadGeometry(vars);
-    loadVideoFrames("../data/video.mkv");
+    loadVideoFrames("../data/video.mkv", vars);
 
+    auto tex = vars.get<ge::gl::Texture>("texture.color");
+    auto grid = vars.get<glm::uvec2>("gridSize");
+    auto stats = vars.add<ge::gl::Buffer>("statistics",tex->getWidth(0)*tex->getHeight(0)*grid->x*grid->y*4);
+    unsigned int c=0;
+    stats->clear(GL_R32UI, GL_RED, GL_UNSIGNED_INT, &c);
+    stats->bindBase(GL_SHADER_STORAGE_BUFFER, 2);
+    
     ge::gl::glEnable(GL_DEPTH_TEST);
 }
 
@@ -418,7 +489,7 @@ void LightFields::draw()
     ge::gl::glBindTextureUnit(0,vars.get<ge::gl::Texture>("texture.color")->getId());
     //ge::gl::glBindTextureUnit(1,vars.get<ge::gl::Texture>("texture.depth")->getId());
     ge::gl::glBindTextureUnit(2,vars.get<ge::gl::Texture>("geomTexture")->getId());
-
+    //ge::gl::glBindTextureUnit(0,vars.get<ge::gl::Texture>("testTex")->getId());
     vars.get<ge::gl::Program>("lfProgram")
     ->setMatrix4fv("mvp",glm::value_ptr(projection->getProjection()*view->getView()))
     ->set1f("aspect",vars.getFloat("texture.aspect"))
@@ -432,6 +503,7 @@ void LightFields::draw()
     ->set1i("mode",vars.getBool("mode"))
     ->set1i("frame",vars.getUint32("frame"))
     ->set1i("depth",vars.getBool("depth"))
+    ->set1i("printStats",vars.getBool("printStats"))
     //->set2uiv("winSize",glm::value_ptr(*vars.get<glm::uvec2>("windowSize")))
     ->set2uiv("gridSize",glm::value_ptr(*vars.get<glm::uvec2>("gridSize")))
     ->setMatrix4fv("view",glm::value_ptr(view->getView()))
@@ -445,16 +517,45 @@ void LightFields::draw()
     ->set1f("aspect",vars.getFloat("texture.aspect"))
     ->use();
     vars.get<ge::gl::VertexArray>("vao")->bind();
+    vars.get<ge::gl::Buffer>("statistics")->bind(GL_SHADER_STORAGE_BUFFER);
    
-	 ge::gl::glDrawArrays(GL_TRIANGLES,0,1000);
+    ge::gl::glDrawArrays(GL_TRIANGLES,0,1000);
 
+    vars.get<ge::gl::Buffer>("statistics")->unbind(GL_SHADER_STORAGE_BUFFER);
     vars.get<ge::gl::VertexArray>("vao")->unbind();
-
-    drawImguiVars(vars);
 
     GLint nCurAvailMemoryInKB = 0;
     /*ge::gl::glGetIntegerv( GL_TEXTURE_FREE_MEMORY_ATI,
                            &nCurAvailMemoryInKB );*/
+    
+    if(vars.getBool("printStats"))
+    {
+        ge::gl::glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+        GLuint *ptr = (GLuint*)vars.get<ge::gl::Buffer>("statistics")->map();
+        auto tex = vars.get<ge::gl::Texture>("texture.color");
+        auto grid = vars.get<glm::uvec2>("gridSize");
+        const uint32_t gridSize = grid->x*grid->y;
+        const uint32_t picSize = tex->getWidth(0)*tex->getHeight(0);
+        const uint32_t statSize = picSize*gridSize;
+        std::vector<uint8_t> data(statSize);
+        for(int i=0; i<statSize; i++)
+            data[i] = static_cast<uint8_t>(ptr[i])*100;
+
+        vars.get<ge::gl::Buffer>("statistics")->unmap();
+
+        for(int i=0; i<gridSize; i++)
+        {
+            fipImage img(FIT_BITMAP, tex->getWidth(0), tex->getHeight(0), 8);
+            memcpy(img.accessPixels(), data.data()+i*picSize, picSize);
+            std::string path = "./stats/"+std::to_string(i)+".pgm";
+            img.save(path.c_str());           
+        }
+
+        vars.getBool("printStats") = false;
+    }
+    
+    drawImguiVars(vars);
     ImGui::LabelText("freeMemory","%i MB",nCurAvailMemoryInKB / 1024);
     swap();
 /*

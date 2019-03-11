@@ -14,10 +14,35 @@ uniform int mode = 0;
 uniform int kernel = 1;
 uniform int frame = 1;
 uniform int depth = 0;
+uniform int printStats = 0;
 uniform float aspect = 1.f;
 uniform uvec2 gridSize = uvec2(8,8);
 layout(binding=0)uniform sampler2DArray tex;
 layout(binding=1)uniform sampler2DArray texDepth;
+
+layout(std430, binding = 2) buffer statisticsLayout
+{
+   uint statistics[];
+};
+
+void incStatPixel(ivec2 cam, vec2 pix)
+{
+    const uint width = 1920;
+    const uint height = 1080;
+    pix=clamp(pix, 0.0, 1.0)*vec2(width,height);
+    uint imageSize = width*height;
+    uvec2 pixDown = uvec2(floor(pix.x), floor(pix.y));
+    uvec2 pixUp = uvec2(ceil(pix.x), ceil(pix.y));
+    uint camIndex = imageSize*(cam.y*gridSize.x+cam.x);
+    uint pixIndex = camIndex+pixDown.y*width+pixDown.x;
+    atomicAdd(statistics[pixIndex],1);
+    pixIndex = camIndex+pixDown.y*width+pixUp.x;
+    atomicAdd(statistics[pixIndex],1);
+    pixIndex = camIndex+pixUp.y*width+pixUp.x;
+    atomicAdd(statistics[pixIndex],1);
+    pixIndex = camIndex+pixUp.y*width+pixDown.x;
+    atomicAdd(statistics[pixIndex],1);
+}
 
 vec3 planeLineInter(vec3 a, vec3 b, vec3 normal, vec3 p)
 {
@@ -37,6 +62,8 @@ void main()
         {
            xSel = clamp(xSelect,0,gridSize.x-1);
            ySel = clamp(ySelect,0,gridSize.y-1);
+           //if(printStats == 1)
+           //incStatPixel(ivec2(xSel, ySel), vCoord);
         }
         else
         {
@@ -128,6 +155,8 @@ void main()
                 texCoord[i] /= scale;
                 
                 c += texture(tex,vec3(texCoord[i],slice)) * weight;
+                if(printStats == 1)
+                    incStatPixel(neighbour, texCoord[i]);
                 //c += vec4(vec3(zn),1.0)*weight;
                 //c = vec4(vec3(zn),1.0);
             }
