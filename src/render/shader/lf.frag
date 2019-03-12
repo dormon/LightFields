@@ -19,6 +19,7 @@ uniform float aspect = 1.f;
 uniform uvec2 gridSize = uvec2(8,8);
 layout(binding=0)uniform sampler2DArray tex;
 layout(binding=1)uniform sampler2DArray texDepth;
+layout(binding=3)uniform sampler2D texTest;
 
 layout(std430, binding = 2) buffer statisticsLayout
 {
@@ -81,6 +82,7 @@ void main()
         c += texture(tex,vec3(vCoord,offset + (floor(ySel)  )*gridSize.x+floor(xSel)+1)) * (  fract(xSel)) * (1-fract(ySel));
         c += texture(tex,vec3(vCoord,offset + (floor(ySel)+1)*gridSize.x+floor(xSel)  )) * (1-fract(xSel)) * (  fract(ySel));
         c += texture(tex,vec3(vCoord,offset + (floor(ySel)+1)*gridSize.x+floor(xSel)+1)) * (  fract(xSel)) * (  fract(ySel));
+        c = vec4(texture(texTest,vCoord));
     }
     else if(mode <= 3)
     {

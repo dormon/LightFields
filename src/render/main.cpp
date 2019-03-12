@@ -244,6 +244,7 @@ void loadGeometry(vars::Vars&vars)
 //	vao->addAttrib(vbo,ATTR_UV,2,GL_FLOAT,3*sizeof(GL_FLOAT),0);
 }
 
+    GLuint tex;
 //convert as -c:v libx265 -pix_fmt yuv420p (pix fmt, only 420 avaliable for gpu dec)
 void loadVideoFrames(const char *path, vars::Vars&vars)
 {
@@ -333,7 +334,7 @@ void loadVideoFrames(const char *path, vars::Vars&vars)
 
     uint32_t w = 1920;
     uint32_t h = 1080;
-    VdpChromaType ct = VDP_YCBCR_FORMAT_YV12;
+    VdpChromaType ct = VDP_CHROMA_TYPE_420;
     void *param_vals[] = {
                 &ct,
                 &w,
@@ -341,19 +342,27 @@ void loadVideoFrames(const char *path, vars::Vars&vars)
         };
 
     VdpGetProcAddress *get_proc_address = k->get_proc_address;
-    VdpOutputSurface surface;
+    /*VdpVideoSurfaceGetParameters *vdp_video_surface_get_parameters;
+    get_proc_address(k->device, VDP_FUNC_ID_VIDEO_SURFACE_GET_PARAMETERS, (void**)&vdp_video_surface_get_parameters);*/
     VdpOutputSurfaceCreate *vdp_output_surface_create;
     get_proc_address(k->device, VDP_FUNC_ID_OUTPUT_SURFACE_CREATE, (void**)&vdp_output_surface_create);
-    vdp_output_surface_create(k->device, VDP_RGBA_FORMAT_B8G8R8A8, w, h, &surface);
-    VdpVideoMixer mixer;
     VdpVideoMixerCreate *vdp_video_mixer_create;
     get_proc_address(k->device, VDP_FUNC_ID_VIDEO_MIXER_CREATE, (void**)&vdp_video_mixer_create);
-    vdp_video_mixer_create(k->device, 0, nullptr, 3, params, param_vals, &mixer);
     VdpVideoMixerRender * vdp_video_mixer_render;
     get_proc_address(k->device, VDP_FUNC_ID_VIDEO_MIXER_RENDER, (void**)&vdp_video_mixer_render);
-    GLuint tex;
-//  tex = vars.reCreate<ge::gl::Texture>("testTex",GL_TEXTURE_2D,GL_RGBA8,1,1920,1080)->getId();
-    GLvdpauSurfaceNV nvSurf = ge::gl::glVDPAURegisterOutputSurfaceNV((void *)(uintptr_t)surface,GL_TEXTURE_2D,1,&tex);
+   
+    ge::gl::glGenTextures(1, &tex);
+ 
+    VdpOutputSurface surface;
+    if(vdp_output_surface_create(k->device, VDP_RGBA_FORMAT_B8G8R8A8, w, h, &surface) != VDP_STATUS_OK)
+        throw std::runtime_error("Cannot create VDPAU output surface.");
+    VdpVideoMixer mixer;
+    if(vdp_video_mixer_create(k->device, 0, nullptr, 3, params, param_vals, &mixer) != VDP_STATUS_OK)
+        throw std::runtime_error("Cannot create VDPAU mixer.");
+    //tex = vars.reCreate<ge::gl::Texture>("testTex",GL_TEXTURE_2D,GL_RGBA8,1,1920,1080)->getId();
+    /*if(vdp_video_surface_get_parameters((VdpVideoSurface)(uintptr_t)frame->data[3], &ct, &w, &h) != VDP_STATUS_OK)
+        throw std::runtime_error("Cannot get surface parameters.");*/
+//    GLvdpauSurfaceNV nvSurf = ge::gl::glVDPAURegisterOutputSurfaceNV((void *)(uintptr_t)surface,GL_TEXTURE_2D,1,&tex);
 
     AVPacket packet;
     while(av_read_frame(formatContext, &packet) == 0)
@@ -387,14 +396,19 @@ void loadVideoFrames(const char *path, vars::Vars&vars)
 
             if(frame->format == pixFmt)
             {
-              uint32_t h=0;
-              av_vdpau_get_surface_parameters(codecContext, NULL, NULL, &h);
-                //std::cerr <<h; 
-                
                 if(vdp_video_mixer_render(mixer, VDP_INVALID_HANDLE, nullptr, VDP_VIDEO_MIXER_PICTURE_STRUCTURE_FRAME, 0, nullptr, (VdpVideoSurface)(uintptr_t)frame->data[3], 0, nullptr, nullptr, surface, nullptr, nullptr, 0, nullptr) != VDP_STATUS_OK)
                     throw std::runtime_error("VDP mixer error!");
-                //ge::gl::glVDPAUMapSurfacesNV (1, &nvSurf);
-                //ge::gl::glVDPAURegisterVideoSurfaceNV(reinterpret_cast<void*>/*(uintptr_t)&*/(frame->data[3]),GL_TEXTURE_2D,4,tex);
+                //ge::gl::glVDPAUUnmapSurfacesNV (1, &nvSurf);
+                GLvdpauSurfaceNV nvSurf = ge::gl::glVDPAURegisterOutputSurfaceNV((void *)(uintptr_t)surface,GL_TEXTURE_2D,1,&tex);
+                ge::gl::glVDPAUSurfaceAccessNV(nvSurf, GL_READ_ONLY);
+                ge::gl::glVDPAUMapSurfacesNV (1, &nvSurf);
+                int w, h;
+                int miplevel = 0;
+                ge::gl::glBindTexture(tex, GL_TEXTURE_2D);
+                ge::gl::glGetTexLevelParameteriv(GL_TEXTURE_2D, miplevel, GL_TEXTURE_WIDTH, &w);
+                ge::gl::glGetTexLevelParameteriv(GL_TEXTURE_2D, miplevel, GL_TEXTURE_HEIGHT, &h);
+                std::cerr << w << " " << h << std::endl;
+                return;
            }
              
             /*            
@@ -489,7 +503,7 @@ void LightFields::draw()
     ge::gl::glBindTextureUnit(0,vars.get<ge::gl::Texture>("texture.color")->getId());
     //ge::gl::glBindTextureUnit(1,vars.get<ge::gl::Texture>("texture.depth")->getId());
     ge::gl::glBindTextureUnit(2,vars.get<ge::gl::Texture>("geomTexture")->getId());
-    //ge::gl::glBindTextureUnit(0,vars.get<ge::gl::Texture>("testTex")->getId());
+    ge::gl::glBindTextureUnit(3,tex);
     vars.get<ge::gl::Program>("lfProgram")
     ->setMatrix4fv("mvp",glm::value_ptr(projection->getProjection()*view->getView()))
     ->set1f("aspect",vars.getFloat("texture.aspect"))
