@@ -207,44 +207,6 @@ int loadLfImage(vars::Vars&vars, const char* path, bool depth)
     return imgs.size();
 }
 
-void loadTextures(vars::Vars&vars)
-{
-	int size = loadLfImage(vars, "../data/pavfhd", false);
-    size = 8;//glm::sqrt(size);
-    vars.add<glm::uvec2>("gridSize",glm::uvec2(static_cast<unsigned int>(size)));
-	//loadLfImage(vars, "../data/dummy", true);
-	
-    fipImage img;
-    img.load("../data/brick.jpg");
-    ge::gl::Texture* geomTex = vars.reCreate<ge::gl::Texture>("geomTexture",GL_TEXTURE_2D,GL_RGB8,1,img.getWidth(), img.getHeight());
-    ge::gl::glTextureSubImage2D(geomTex->getId(), 0, 0,0,img.getWidth(), img.getHeight(), GL_BGR, GL_UNSIGNED_BYTE, (void*)(img.accessPixels()));
-}
-
-void loadGeometry(vars::Vars&vars)
-{
-    auto vao = vars.add<ge::gl::VertexArray>("vao");
-    vao->bind();
-    Assimp::Importer importer;
-    const aiScene* scene = importer.ReadFile("../data/untitled.obj", 0);
-    enum Attribs {ATTR_POSITION=0, ATTR_NORMAL, ATTR_UV};
-    auto vbo = vars.add<ge::gl::Buffer>("vboPos",scene->mMeshes[0]->mNumVertices*sizeof(aiVector3D), scene->mMeshes[0]->mVertices);
-	vao->addAttrib(vbo,ATTR_POSITION,3,GL_FLOAT);
-    vbo = vars.add<ge::gl::Buffer>("vboNorm",scene->mMeshes[0]->mNumVertices*sizeof(aiVector3D), scene->mMeshes[0]->mNormals);
-	vao->addAttrib(vbo,ATTR_NORMAL,3,GL_FLOAT);
-	std::vector<float> texCoords;
-    texCoords.reserve(scene->mMeshes[0]->mNumVertices * 2);
-		for(int i = 0; i < scene->mMeshes[0]->mNumVertices; ++i) {
-			texCoords[i * 2] = scene->mMeshes[0]->mTextureCoords[0][i].x;
-			texCoords[i * 2 + 1] = scene->mMeshes[0]->mTextureCoords[0][i].y;
-		}
-
-    vbo = vars.add<ge::gl::Buffer>("vboUv",scene->mMeshes[0]->mNumVertices*sizeof(GL_FLOAT)*2, texCoords.data());
-	vao->addAttrib(vbo,ATTR_UV,2,GL_FLOAT,2*sizeof(GL_FLOAT),0);
-    //vbo = vars.add<ge::gl::Buffer>("vboUv",scene->mMeshes[0]->mNumVertices*sizeof(aiVector3D), scene->mMeshes[0]->mTextureCoords);
-//	vao->addAttrib(vbo,ATTR_UV,2,GL_FLOAT,3*sizeof(GL_FLOAT),0);
-}
-
-    GLuint tex;
 //convert as -c:v libx265 -pix_fmt yuv420p (pix fmt, only 420 avaliable for gpu dec)
 void loadVideoFrames(const char *path, vars::Vars&vars)
 {
@@ -281,28 +243,12 @@ void loadVideoFrames(const char *path, vars::Vars&vars)
         //vaapi libva-vdpau-driver for nvidia needed
         else if (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX && config->device_type == AV_HWDEVICE_TYPE_VDPAU)
         {   
-            pixFmt = config->pix_fmt;//AV_PIX_FMT_RGB24;
+            pixFmt = config->pix_fmt;
             //std::cerr << av_get_pix_fmt_name(pixFmt) << std::endl;
             break;
         }
         //std::cerr << av_hwdevice_get_type_name(config->device_type) << std::endl;
     }
-
-//default one returns first one that is not hw accel only
-/*codecContext->get_format = [](AVCodecContext *ctx,const enum AVPixelFormat *pix_fmts)
-   {
-       const enum AVPixelFormat *p;
-   
-       for (p = pix_fmts; *p != -1; p++) {
-           if (*p == AV_PIX_FMT_VDPAU )
-               return *p;
-       }
-   
-       fprintf(stderr, "Failed to get HW surface format.\n");
-        return AV_PIX_FMT_GBRP;
-       return AV_PIX_FMT_NONE;
-   };
-*/
 
     AVBufferRef *deviceContext = nullptr;
     if(av_hwdevice_ctx_create(&deviceContext, config->device_type, NULL, NULL, 0) < 0)
@@ -322,27 +268,12 @@ void loadVideoFrames(const char *path, vars::Vars&vars)
                     std::cerr<<buff.data() << std::endl;
                      throw std::runtime_error("Cannot create derived CL context");
     }*/
-   AVHWDeviceContext *device_ctx = (AVHWDeviceContext*)deviceContext->data;
-   AVVDPAUDeviceContext *k = reinterpret_cast<AVVDPAUDeviceContext*>(device_ctx->hwctx);
-//             AVVDPAUDeviceContext *k = reinterpret_cast<AVVDPAUDeviceContext*>(reinterpret_cast<AVHWDeviceContext*>(deviceContext->data)->hwctx); 
+    AVHWDeviceContext *device_ctx = (AVHWDeviceContext*)deviceContext->data;
+    AVVDPAUDeviceContext *k = reinterpret_cast<AVVDPAUDeviceContext*>(device_ctx->hwctx);
     ge::gl::glVDPAUInitNV((void*)(uintptr_t)(k->device), (void*)k->get_proc_address);
-    VdpVideoMixerParameter params[] = {
-                VDP_VIDEO_MIXER_PARAMETER_CHROMA_TYPE,
-                VDP_VIDEO_MIXER_PARAMETER_VIDEO_SURFACE_WIDTH,
-                VDP_VIDEO_MIXER_PARAMETER_VIDEO_SURFACE_HEIGHT
-        };
-
-    uint32_t w = 1920;
-    uint32_t h = 1080;
-    VdpChromaType ct = VDP_CHROMA_TYPE_420;
-    void *param_vals[] = {
-                &ct,
-                &w,
-                &h
-        };
 
     VdpGetProcAddress *get_proc_address = k->get_proc_address;
-    /*VdpVideoSurfaceGetParameters *vdp_video_surface_get_parameters;
+/*    VdpVideoSurfaceGetParameters *vdp_video_surface_get_parameters;
     get_proc_address(k->device, VDP_FUNC_ID_VIDEO_SURFACE_GET_PARAMETERS, (void**)&vdp_video_surface_get_parameters);*/
     VdpOutputSurfaceCreate *vdp_output_surface_create;
     get_proc_address(k->device, VDP_FUNC_ID_OUTPUT_SURFACE_CREATE, (void**)&vdp_output_surface_create);
@@ -351,20 +282,28 @@ void loadVideoFrames(const char *path, vars::Vars&vars)
     VdpVideoMixerRender * vdp_video_mixer_render;
     get_proc_address(k->device, VDP_FUNC_ID_VIDEO_MIXER_RENDER, (void**)&vdp_video_mixer_render);
    
-    ge::gl::glGenTextures(1, &tex);
+    uint32_t w = codecContext->width;
+    uint32_t h = codecContext->height;
+    vars.addUint32("lf.width", w);
+    vars.addUint32("lf.height", h);
+    vars.addFloat("texture.aspect",(float)w/(float)h);
+    VdpChromaType ct = VDP_CHROMA_TYPE_420;
+    VdpVideoMixerParameter params[] = {
+        VDP_VIDEO_MIXER_PARAMETER_CHROMA_TYPE,
+        VDP_VIDEO_MIXER_PARAMETER_VIDEO_SURFACE_WIDTH,
+        VDP_VIDEO_MIXER_PARAMETER_VIDEO_SURFACE_HEIGHT};
+    void *param_vals[] = {&ct,&w,&h};
+    /*if(vdp_video_surface_get_parameters((VdpVideoSurface)(uintptr_t)frame->data[3], &ct, &w, &h) != VDP_STATUS_OK)
+        throw std::runtime_error("Cannot get surface parameters.");*/
  
-    VdpOutputSurface surface;
-    if(vdp_output_surface_create(k->device, VDP_RGBA_FORMAT_B8G8R8A8, w, h, &surface) != VDP_STATUS_OK)
-        throw std::runtime_error("Cannot create VDPAU output surface.");
     VdpVideoMixer mixer;
     if(vdp_video_mixer_create(k->device, 0, nullptr, 3, params, param_vals, &mixer) != VDP_STATUS_OK)
         throw std::runtime_error("Cannot create VDPAU mixer.");
-    //tex = vars.reCreate<ge::gl::Texture>("testTex",GL_TEXTURE_2D,GL_RGBA8,1,1920,1080)->getId();
-    /*if(vdp_video_surface_get_parameters((VdpVideoSurface)(uintptr_t)frame->data[3], &ct, &w, &h) != VDP_STATUS_OK)
-        throw std::runtime_error("Cannot get surface parameters.");*/
-//    GLvdpauSurfaceNV nvSurf = ge::gl::glVDPAURegisterOutputSurfaceNV((void *)(uintptr_t)surface,GL_TEXTURE_2D,1,&tex);
 
     AVPacket packet;
+    VdpOutputSurface surface;
+    std::vector<GLuint64> textureHandles;
+    textureHandles.reserve(64);
     while(av_read_frame(formatContext, &packet) == 0)
     {
             if(packet.stream_index != videoStreamId)
@@ -380,15 +319,13 @@ void loadVideoFrames(const char *path, vars::Vars&vars)
         while(1)
         {
             AVFrame *frame = av_frame_alloc();
-            AVFrame *swFrame = av_frame_alloc();
-            if(!frame || !swFrame)
+            if(!frame)
                 throw std::runtime_error("Cannot allocate packet/frame");
 
             int err = avcodec_receive_frame(codecContext, frame);
             if(err == AVERROR_EOF || err == AVERROR(EAGAIN))
             {
                 av_frame_free(&frame);
-                av_frame_free(&swFrame);
                 break;
             }
             else if(err < 0)
@@ -396,58 +333,67 @@ void loadVideoFrames(const char *path, vars::Vars&vars)
 
             if(frame->format == pixFmt)
             {
+                if(vdp_output_surface_create(k->device, VDP_RGBA_FORMAT_B8G8R8A8, w, h, &surface) != VDP_STATUS_OK)
+                    throw std::runtime_error("Cannot create VDPAU output surface.");
                 if(vdp_video_mixer_render(mixer, VDP_INVALID_HANDLE, nullptr, VDP_VIDEO_MIXER_PICTURE_STRUCTURE_FRAME, 0, nullptr, (VdpVideoSurface)(uintptr_t)frame->data[3], 0, nullptr, nullptr, surface, nullptr, nullptr, 0, nullptr) != VDP_STATUS_OK)
                     throw std::runtime_error("VDP mixer error!");
-                //ge::gl::glVDPAUUnmapSurfacesNV (1, &nvSurf);
-                GLvdpauSurfaceNV nvSurf = ge::gl::glVDPAURegisterOutputSurfaceNV((void *)(uintptr_t)surface,GL_TEXTURE_2D,1,&tex);
+                
+                GLuint textureId;
+                ge::gl::glCreateTextures(GL_TEXTURE_2D, 1, &textureId);
+                GLvdpauSurfaceNV nvSurf = ge::gl::glVDPAURegisterOutputSurfaceNV((void *)(uintptr_t)surface,GL_TEXTURE_2D,1,&textureId);
                 ge::gl::glVDPAUSurfaceAccessNV(nvSurf, GL_READ_ONLY);
                 ge::gl::glVDPAUMapSurfacesNV (1, &nvSurf);
-                int w, h;
-                int miplevel = 0;
-                ge::gl::glBindTexture(tex, GL_TEXTURE_2D);
-                ge::gl::glGetTexLevelParameteriv(GL_TEXTURE_2D, miplevel, GL_TEXTURE_WIDTH, &w);
-                ge::gl::glGetTexLevelParameteriv(GL_TEXTURE_2D, miplevel, GL_TEXTURE_HEIGHT, &h);
-                std::cerr << w << " " << h << std::endl;
-                return;
-           }
-             
-            /*            
-            std::cerr << av_get_pix_fmt_name((AVPixelFormat)frame->format);
-            if(frame->format == pixFmt)
-                if(av_hwframe_transfer_data(swFrame, frame,0) < 0)
-                    throw std::runtime_error("Cannot transfer data");
-              
-                std::vector<char> buff(100);
-                int e;
-                AVPixelFormat *fmts = new AVPixelFormat[100];
-                if((e=av_hwframe_transfer_get_formats(codecContext->hw_frames_ctx, AV_HWFRAME_TRANSFER_DIRECTION_FROM, fmts.data(), 0)) == 0)
-                {
-                        std::cerr <<"dzzt";
-                    for(int i=0; fmts[i] != AV_PIX_FMT_NONE; i++)
-                        std::cerr << av_get_pix_fmt_name(fmts[i]) <<std::endl;
-                } 
-                 else
-                 {
-                    av_strerror(e, buff.data(), buff.size());
-                    std::cerr<<"error:"<<buff.data();
-                 }
-                delete [] fmts;
-            */
-
-            
-
+                
+                GLuint64 textureHandle = ge::gl::glGetTextureHandleARB(textureId);
+        		ge::gl::glMakeTextureHandleResidentARB(textureHandle);
+                textureHandles.push_back(textureHandle);
+           } 
             av_frame_free(&frame);
-            av_frame_free(&swFrame);
         }
         
         av_packet_unref(&packet);
     }
+ 
+    vars.addVector<GLuint64>("lfTextures", textureHandles);
+}
 
-//av_hwframe_transfer_data(swFrame, frame,0);
-//if(swFrame->format == AV_PIX_FMT_VDPAU)
-//std::cerr<< "aaa";
-/*std::vector<char> buffer(swFrame->width*swFrame->height);
-memcpy(buffer.data(), swFrame->data[0], swFrame->width*swFrame->height);*/
+void loadTextures(vars::Vars&vars)
+{
+	//int size = loadLfImage(vars, "../data/pavfhd", false);
+    loadVideoFrames("../data/video.mkv", vars);
+    //TODO get from container
+    uint32_t size = 8;//glm::sqrt(size);
+    vars.add<glm::uvec2>("gridSize",glm::uvec2(static_cast<unsigned int>(size)));
+	//loadLfImage(vars, "../data/dummy", true);
+	
+    fipImage img;
+    img.load("../data/brick.jpg");
+    ge::gl::Texture* geomTex = vars.reCreate<ge::gl::Texture>("geomTexture",GL_TEXTURE_2D,GL_RGB8,1,img.getWidth(), img.getHeight());
+    ge::gl::glTextureSubImage2D(geomTex->getId(), 0, 0,0,img.getWidth(), img.getHeight(), GL_BGR, GL_UNSIGNED_BYTE, (void*)(img.accessPixels()));
+}
+
+void loadGeometry(vars::Vars&vars)
+{
+    auto vao = vars.add<ge::gl::VertexArray>("vao");
+    vao->bind();
+    Assimp::Importer importer;
+    const aiScene* scene = importer.ReadFile("../data/untitled.obj", 0);
+    enum Attribs {ATTR_POSITION=0, ATTR_NORMAL, ATTR_UV};
+    auto vbo = vars.add<ge::gl::Buffer>("vboPos",scene->mMeshes[0]->mNumVertices*sizeof(aiVector3D), scene->mMeshes[0]->mVertices);
+	vao->addAttrib(vbo,ATTR_POSITION,3,GL_FLOAT);
+    vbo = vars.add<ge::gl::Buffer>("vboNorm",scene->mMeshes[0]->mNumVertices*sizeof(aiVector3D), scene->mMeshes[0]->mNormals);
+	vao->addAttrib(vbo,ATTR_NORMAL,3,GL_FLOAT);
+	std::vector<float> texCoords;
+    texCoords.reserve(scene->mMeshes[0]->mNumVertices * 2);
+		for(int i = 0; i < scene->mMeshes[0]->mNumVertices; ++i) {
+			texCoords[i * 2] = scene->mMeshes[0]->mTextureCoords[0][i].x;
+			texCoords[i * 2 + 1] = scene->mMeshes[0]->mTextureCoords[0][i].y;
+		}
+
+    vbo = vars.add<ge::gl::Buffer>("vboUv",scene->mMeshes[0]->mNumVertices*sizeof(GL_FLOAT)*2, texCoords.data());
+	vao->addAttrib(vbo,ATTR_UV,2,GL_FLOAT,2*sizeof(GL_FLOAT),0);
+    //vbo = vars.add<ge::gl::Buffer>("vboUv",scene->mMeshes[0]->mNumVertices*sizeof(aiVector3D), scene->mMeshes[0]->mTextureCoords);
+//	vao->addAttrib(vbo,ATTR_UV,2,GL_FLOAT,3*sizeof(GL_FLOAT),0);
 }
 
 void LightFields::init()
@@ -473,11 +419,10 @@ void LightFields::init()
     createCamera(vars);
     loadTextures(vars);
     loadGeometry(vars);
-    loadVideoFrames("../data/video.mkv", vars);
 
-    auto tex = vars.get<ge::gl::Texture>("texture.color");
+    //auto tex = vars.get<ge::gl::Texture>("texture.color");
     auto grid = vars.get<glm::uvec2>("gridSize");
-    auto stats = vars.add<ge::gl::Buffer>("statistics",tex->getWidth(0)*tex->getHeight(0)*grid->x*grid->y*4);
+    auto stats = vars.add<ge::gl::Buffer>("statistics",vars.getUint32("lf.width")*vars.getUint32("lf.height")*grid->x*grid->y*4);
     unsigned int c=0;
     stats->clear(GL_R32UI, GL_RED, GL_UNSIGNED_INT, &c);
     stats->bindBase(GL_SHADER_STORAGE_BUFFER, 2);
@@ -487,7 +432,6 @@ void LightFields::init()
 
 void LightFields::draw()
 {
-
     auto start = std::chrono::steady_clock::now();
 
     createCamera(vars);
@@ -500,11 +444,13 @@ void LightFields::draw()
 
     drawGrid(vars);
 
-    ge::gl::glBindTextureUnit(0,vars.get<ge::gl::Texture>("texture.color")->getId());
-    //ge::gl::glBindTextureUnit(1,vars.get<ge::gl::Texture>("texture.depth")->getId());
+    //ge::gl::glBindTextureUnit(0,vars.get<ge::gl::Texture>("texture.color")->getId());
+    //ge::gl::glBindTextureUnit(1,vars.get<ge::gl::Texture>("texture.depth")->getId()); 
+
     ge::gl::glBindTextureUnit(2,vars.get<ge::gl::Texture>("geomTexture")->getId());
-    ge::gl::glBindTextureUnit(3,tex);
-    vars.get<ge::gl::Program>("lfProgram")
+    
+    auto program = vars.get<ge::gl::Program>("lfProgram");
+    program
     ->setMatrix4fv("mvp",glm::value_ptr(projection->getProjection()*view->getView()))
     ->set1f("aspect",vars.getFloat("texture.aspect"))
     ->set1f("xSelect",vars.getFloat("xSelect"))
@@ -523,6 +469,10 @@ void LightFields::draw()
     ->setMatrix4fv("view",glm::value_ptr(view->getView()))
     //->setMatrix4fv("proj",glm::value_ptr(projection->getProjection()))
     ->use();
+
+    vars.get<ge::gl::Buffer>("statistics")->bind(GL_SHADER_STORAGE_BUFFER);
+    ge::gl::glProgramUniformHandleui64vARB(program->getId(), program->getUniformLocation("lfTextures"), 64, vars.getVector<GLuint64>("lfTextures").data());
+
     ge::gl::glDrawArrays(GL_TRIANGLE_STRIP,0,4);
     vars.get<ge::gl::VertexArray>("emptyVao")->unbind();
 
@@ -531,8 +481,7 @@ void LightFields::draw()
     ->set1f("aspect",vars.getFloat("texture.aspect"))
     ->use();
     vars.get<ge::gl::VertexArray>("vao")->bind();
-    vars.get<ge::gl::Buffer>("statistics")->bind(GL_SHADER_STORAGE_BUFFER);
-   
+      
     ge::gl::glDrawArrays(GL_TRIANGLES,0,1000);
 
     vars.get<ge::gl::Buffer>("statistics")->unbind(GL_SHADER_STORAGE_BUFFER);
