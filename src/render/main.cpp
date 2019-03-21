@@ -208,7 +208,7 @@ int loadLfImage(vars::Vars&vars, const char* path, bool depth)
 }
 
 //convert as -c:v libx265 -pix_fmt yuv420p (pix fmt, only 420 avaliable for gpu dec)
-void loadVideoFrames(const char *path, vars::Vars&vars)
+std::vector<GLuint64> loadVideoFrames(const char *path, int count)
 {
     AVFormatContext *formatContext = avformat_alloc_context();
     if(!formatContext)
@@ -284,9 +284,9 @@ void loadVideoFrames(const char *path, vars::Vars&vars)
    
     uint32_t w = codecContext->width;
     uint32_t h = codecContext->height;
-    vars.addUint32("lf.width", w);
+/*    vars.addUint32("lf.width", w);
     vars.addUint32("lf.height", h);
-    vars.addFloat("texture.aspect",(float)w/(float)h);
+    vars.addFloat("texture.aspect",(float)w/(float)h);*/
     VdpChromaType ct = VDP_CHROMA_TYPE_420;
     VdpVideoMixerParameter params[] = {
         VDP_VIDEO_MIXER_PARAMETER_CHROMA_TYPE,
@@ -303,20 +303,31 @@ void loadVideoFrames(const char *path, vars::Vars&vars)
     AVPacket packet;
     VdpOutputSurface surface;
     std::vector<GLuint64> textureHandles;
-    textureHandles.reserve(64);
-    while(av_read_frame(formatContext, &packet) == 0)
+    textureHandles.reserve(count);
+    std::vector<GLuint> textures(count);
+    ge::gl::glCreateTextures(GL_TEXTURE_2D, count, textures.data());
+    
+    bool send = (av_read_frame(formatContext, &packet) == 0);
+    for(auto texture : textures)
     {
+        while(send)
+        {
             if(packet.stream_index != videoStreamId)
             {
                 av_packet_unref(&packet);
                 continue;
             }
+            else if(avcodec_send_packet(codecContext, &packet) != 0)
+                break;
+            av_packet_unref(&packet);
+            send = (av_read_frame(formatContext, &packet) == 0); 
+        }
+           /* av_read_frame(formatContext, &packet);
+            avcodec_send_packet(codecContext, &packet);
+            av_packet_unref(&packet);*/
 
-        //TODO send packets in batch until filled and read
-
-        if(avcodec_send_packet(codecContext, &packet) < 0)
-            throw std::runtime_error("Cannot send packet");  
-        while(1)
+        bool waitForFrame = true;
+        while(waitForFrame)
         {
             AVFrame *frame = av_frame_alloc();
             if(!frame)
@@ -326,6 +337,8 @@ void loadVideoFrames(const char *path, vars::Vars&vars)
             if(err == AVERROR_EOF || err == AVERROR(EAGAIN))
             {
                 av_frame_free(&frame);
+            //    avio_seek(formatContext->pb, 0, SEEK_SET);
+              //  av_seek_frame(formatContext, videoStreamId, 0, 0);
                 break;
             }
             else if(err < 0)
@@ -337,9 +350,8 @@ void loadVideoFrames(const char *path, vars::Vars&vars)
                     throw std::runtime_error("Cannot create VDPAU output surface.");
                 if(vdp_video_mixer_render(mixer, VDP_INVALID_HANDLE, nullptr, VDP_VIDEO_MIXER_PICTURE_STRUCTURE_FRAME, 0, nullptr, (VdpVideoSurface)(uintptr_t)frame->data[3], 0, nullptr, nullptr, surface, nullptr, nullptr, 0, nullptr) != VDP_STATUS_OK)
                     throw std::runtime_error("VDP mixer error!");
-                
-                GLuint textureId;
-                ge::gl::glCreateTextures(GL_TEXTURE_2D, 1, &textureId);
+               
+                GLuint textureId = texture;
                 GLvdpauSurfaceNV nvSurf = ge::gl::glVDPAURegisterOutputSurfaceNV((void *)(uintptr_t)surface,GL_TEXTURE_2D,1,&textureId);
                 ge::gl::glVDPAUSurfaceAccessNV(nvSurf, GL_READ_ONLY);
                 ge::gl::glVDPAUMapSurfacesNV (1, &nvSurf);
@@ -347,20 +359,23 @@ void loadVideoFrames(const char *path, vars::Vars&vars)
                 GLuint64 textureHandle = ge::gl::glGetTextureHandleARB(textureId);
         		ge::gl::glMakeTextureHandleResidentARB(textureHandle);
                 textureHandles.push_back(textureHandle);
+                waitForFrame = false;
            } 
             av_frame_free(&frame);
-        }
-        
-        av_packet_unref(&packet);
+        }    
     }
- 
-    vars.addVector<GLuint64>("lfTextures", textureHandles);
+
+    return textureHandles; 
 }
 
 void loadTextures(vars::Vars&vars)
 {
 	//int size = loadLfImage(vars, "../data/pavfhd", false);
-    loadVideoFrames("../data/video.mkv", vars);
+    vars.addVector<GLuint64>("lfTextures", loadVideoFrames("../data/video.mkv", 64));
+    std::cerr << vars.getVector<GLuint64>("lfTextures").size();
+    vars.addUint32("lf.width", 1920);
+    vars.addUint32("lf.height", 1080);
+    vars.addFloat("texture.aspect",1920.0/1080.0);
     //TODO get from container
     uint32_t size = 8;//glm::sqrt(size);
     vars.add<glm::uvec2>("gridSize",glm::uvec2(static_cast<unsigned int>(size)));
