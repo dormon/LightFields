@@ -284,6 +284,7 @@ std::vector<GLuint64> loadVideoFrames(const char *path, int count)
    
     uint32_t w = codecContext->width;
     uint32_t h = codecContext->height;
+    VdpRect flipRect{0,h,w,0};
 /*    vars.addUint32("lf.width", w);
     vars.addUint32("lf.height", h);
     vars.addFloat("texture.aspect",(float)w/(float)h);*/
@@ -322,9 +323,6 @@ std::vector<GLuint64> loadVideoFrames(const char *path, int count)
             av_packet_unref(&packet);
             send = (av_read_frame(formatContext, &packet) == 0); 
         }
-           /* av_read_frame(formatContext, &packet);
-            avcodec_send_packet(codecContext, &packet);
-            av_packet_unref(&packet);*/
 
         bool waitForFrame = true;
         while(waitForFrame)
@@ -334,21 +332,27 @@ std::vector<GLuint64> loadVideoFrames(const char *path, int count)
                 throw std::runtime_error("Cannot allocate packet/frame");
 
             int err = avcodec_receive_frame(codecContext, frame);
-            if(err == AVERROR_EOF || err == AVERROR(EAGAIN))
+            if(err == AVERROR(EAGAIN))
+            {
+                av_packet_unref(&packet);
+                avcodec_send_packet(codecContext, &packet);
+            }
+            else if(err == AVERROR_EOF)
             {
                 av_frame_free(&frame);
+                //TODO reset when asking for more
             //    avio_seek(formatContext->pb, 0, SEEK_SET);
               //  av_seek_frame(formatContext, videoStreamId, 0, 0);
                 break;
             }
             else if(err < 0)
                 throw std::runtime_error("Cannot receive frame");
-
+            
             if(frame->format == pixFmt)
             {
                 if(vdp_output_surface_create(k->device, VDP_RGBA_FORMAT_B8G8R8A8, w, h, &surface) != VDP_STATUS_OK)
                     throw std::runtime_error("Cannot create VDPAU output surface.");
-                if(vdp_video_mixer_render(mixer, VDP_INVALID_HANDLE, nullptr, VDP_VIDEO_MIXER_PICTURE_STRUCTURE_FRAME, 0, nullptr, (VdpVideoSurface)(uintptr_t)frame->data[3], 0, nullptr, nullptr, surface, nullptr, nullptr, 0, nullptr) != VDP_STATUS_OK)
+                if(vdp_video_mixer_render(mixer, VDP_INVALID_HANDLE, nullptr, VDP_VIDEO_MIXER_PICTURE_STRUCTURE_FRAME, 0, nullptr, (VdpVideoSurface)(uintptr_t)frame->data[3], 0, nullptr, &flipRect, surface, nullptr, nullptr, 0, nullptr) != VDP_STATUS_OK)
                     throw std::runtime_error("VDP mixer error!");
                
                 GLuint textureId = texture;

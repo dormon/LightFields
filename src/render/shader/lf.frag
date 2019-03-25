@@ -64,8 +64,6 @@ void main()
     float xSel;
     float ySel;
         
-c = texture(lfTextures[frame],vCoord);
-
     if(mode <= 1)
     {
         if(mode==0)
@@ -86,10 +84,10 @@ c = texture(lfTextures[frame],vCoord);
             ySel = clamp(cooy*(gridSize.y-1),0,gridSize.y-1);
         }
         uint offset = gridSize.x*gridSize.y*frame;
-        c += texture(sampler2D(lfTextures[int(offset + (floor(ySel)  )*gridSize.x+floor(xSel) )]),vCoord) * (1-fract(xSel)) * (1-fract(ySel));
-        c += texture(sampler2D(lfTextures[int(offset + (floor(ySel)  )*gridSize.x+floor(xSel)+1)]),vCoord) * (  fract(xSel)) * (1-fract(ySel));
-        c += texture(sampler2D(lfTextures[int(offset + (floor(ySel)+1)*gridSize.x+floor(xSel)  )]),vCoord) * (1-fract(xSel)) * (  fract(ySel));
-        c += texture(sampler2D(lfTextures[int(offset + (floor(ySel)+1)*gridSize.x+floor(xSel)+1)]),vCoord) * (  fract(xSel)) * (  fract(ySel));
+        c += texture(lfTextures[int(offset + (floor(ySel)  )*gridSize.x+floor(xSel) )],vCoord) * (1-fract(xSel)) * (1-fract(ySel));
+        c += texture(lfTextures[int(offset + (floor(ySel)  )*gridSize.x+floor(xSel)+1)],vCoord) * (  fract(xSel)) * (1-fract(ySel));
+        c += texture(lfTextures[int(offset + (floor(ySel)+1)*gridSize.x+floor(xSel)  )],vCoord) * (1-fract(xSel)) * (  fract(ySel));
+        c += texture(lfTextures[int(offset + (floor(ySel)+1)*gridSize.x+floor(xSel)+1)],vCoord) * (  fract(xSel)) * (  fract(ySel));
     }
     else if(mode <= 3)
     {
@@ -163,7 +161,7 @@ c = texture(lfTextures[frame],vCoord);
                 texCoord[i] += 0.5*scale;
                 texCoord[i] /= scale;
                 
-                c += texture(tex,vec3(texCoord[i],slice)) * weight;
+                c += texture(lfTextures[slice],texCoord[i]) * weight;
                 if(printStats == 1)
                     incStatPixel(neighbour, texCoord[i]);
                 //c += vec4(vec3(zn),1.0)*weight;
@@ -187,10 +185,10 @@ c = texture(lfTextures[frame],vCoord);
                     texCoord.y += 0.5*scale;
                     texCoord /= scale;
                     float weight = 1.0-(length(vec2(x,y)-vec2(xSel,ySel)))/(outDistance);
-                    c += texture(tex, vec3(texCoord, slice)) * weight;
+                    c += texture(lfTextures[slice],texCoord) * weight;
                 }
 
-                c /= c.w;
+                //c /= c.w;
         }	
 		//TODO react to changed position/orientation
         //TODO depth map based blur - DOF
