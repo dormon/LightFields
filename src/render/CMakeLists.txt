@@ -3,12 +3,14 @@ set(SOURCES_RENDER
   Barrier.cpp
   imguiVars.cpp
   DrawGrid.cpp
+  gpuDecoder.cpp
   )
 
 set(INCLUDES_RENDER
   Barrier.h
   imguiVars.h
   DrawGrid.h
+  gpuDecoder.h
   )
 
 set(RENDER renderLf)

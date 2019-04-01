@@ -63,13 +63,14 @@ void main()
     vec4 c = vec4(0);
     float xSel;
     float ySel;
+    ivec2 gridIndex = ivec2(gridSize.x-1, gridSize.y-1);
         
     if(mode <= 1)
     {
         if(mode==0)
         {
-           xSel = clamp(xSelect,0,gridSize.x-1);
-           ySel = clamp(ySelect,0,gridSize.y-1);
+           xSel = clamp(xSelect,0,gridIndex.x);
+           ySel = clamp(ySelect,0,gridIndex.y);
            //if(printStats == 1)
            //incStatPixel(ivec2(xSel, ySel), vCoord);
         }
@@ -80,8 +81,8 @@ void main()
             float range = .2;
             float coox = (clamp(centerRay.x*-1,-range*aspect,range*aspect)/(range*aspect)+1)/2.;
             float cooy = (clamp(centerRay.y,-range,range)/range+1)/2.;
-            xSel = clamp(coox*(gridSize.x-1),0,gridSize.x-1);
-            ySel = clamp(cooy*(gridSize.y-1),0,gridSize.y-1);
+            xSel = clamp(coox*(gridIndex.x),0,gridIndex.x);
+            ySel = clamp(cooy*(gridIndex.y),0,gridIndex.y);
         }
         uint offset = gridSize.x*gridSize.y*frame;
         c += texture(lfTextures[int(offset + (floor(ySel)  )*gridSize.x+floor(xSel) )],vCoord) * (1-fract(xSel)) * (1-fract(ySel));
@@ -155,7 +156,7 @@ void main()
                 int modulo = (i+1)%2;
                 int division = i/2;
                 float weight = (modulo+fract(xSel)*(1-modulo*2)) * (1-division+fract(ySel)*(-1+division*2));
-                int slice = int(gridSize.x*gridSize.y)*frame + (7-neighbour.y)*int(gridSize.x)+neighbour.x;
+                int slice = int(gridSize.x*gridSize.y)*frame + (gridIndex.y-neighbour.y)*int(gridSize.x)+neighbour.x;
                 
                 texCoord[i] = intersCoord+scale*(vec2(xSel,ySel)-neighbour)*(zn/(1.0-zn));
                 texCoord[i] += 0.5*scale;
@@ -176,7 +177,7 @@ void main()
             for(int x=center.x-kernel; x<=center.x+kernel; x++)
                 for(int y=center.y-kernel; y<=center.y+kernel; y++)
                 {                    
-                    int slice = (/*int(gridSize.y)*/7-y)*int(gridSize.x)+x;
+                    int slice = (gridIndex.y-y)*int(gridSize.x)+x;
                     if(x>(gridSize.x-1) || y>(gridSize.y-1) || x<0 || y<0 )
                         continue;
                     
