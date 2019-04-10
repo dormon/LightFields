@@ -208,13 +208,11 @@ void loadTextures(vars::Vars&vars)
 	//int size = loadLfImage(vars, "../data/pavfhd", false);
     vars.add<GpuDecoder>("decoder", GpuDecoder("../data/video.mkv"));
     
-    vars.reCreateVector<GLuint64>("lfTextures", vars.get<GpuDecoder>("decoder")->getFrames(64));
-
+    uint32_t size = 8;
     vars.addUint32("lf.width", 1920);
     vars.addUint32("lf.height", 1080);
     vars.addFloat("texture.aspect",1920.0/1080.0);
     //TODO get from container
-    uint32_t size = 8;//glm::sqrt(size);
     vars.add<glm::uvec2>("gridSize",glm::uvec2(static_cast<unsigned int>(size)));
 	//loadLfImage(vars, "../data/dummy", true);
 	
@@ -284,6 +282,7 @@ void LightFields::init()
 
 void LightFields::draw()
 {
+    vars.reCreateVector<GLuint64>("lfTextures", vars.get<GpuDecoder>("decoder")->getFrames(64));
     auto start = std::chrono::steady_clock::now();
 
     createCamera(vars);

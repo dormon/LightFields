@@ -1,7 +1,7 @@
 #extension GL_ARB_gpu_shader_int64 : enable
 #extension GL_ARB_bindless_texture : require
 
-#define LF_SIZE 64
+#define LF_SIZE 100
 
 out vec4 fColor;
 in vec2 vCoord;
@@ -92,8 +92,8 @@ void main()
     }
     else if(mode <= 3)
     {
-        xSel = vCoord.x*(gridSize.x-1);
-        ySel = vCoord.y*(gridSize.y-1);
+        xSel = vCoord.x*(gridIndex.x);
+        ySel = vCoord.y*(gridIndex.y);
 
         vec3 camPos = (inverse(view)*vec4(0,0,0,1)).xyz;
         vec3 pixelPos = position;// (inverse(view)*inverse(proj)*vec4((gl_FragCoord.xy / winSize *2 -1)*far,far,far)).xyz;
@@ -173,7 +173,7 @@ void main()
         {
             ivec2 center = ivec2(round(xSel), round(ySel));
             float outDistance = length(vec2(xSel,ySel)-vec2(center+kernel+1));
-
+            c = vec4(0);
             for(int x=center.x-kernel; x<=center.x+kernel; x++)
                 for(int y=center.y-kernel; y<=center.y+kernel; y++)
                 {                    
@@ -185,11 +185,11 @@ void main()
                     texCoord.x += 0.5*scale;
                     texCoord.y += 0.5*scale;
                     texCoord /= scale;
-                    float weight = 1.0-(length(vec2(x,y)-vec2(xSel,ySel)))/(outDistance);
+                    float weight = 1.0/(kernel*kernel);//1.0-(length(vec2(x,y)-vec2(xSel,ySel)))/(outDistance);
                     c += texture(lfTextures[slice],texCoord) * weight;
                 }
 
-                //c /= c.w;
+//                c /= c.w;
         }	
 		//TODO react to changed position/orientation
         //TODO depth map based blur - DOF

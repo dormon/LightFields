@@ -3,16 +3,21 @@
 //convert as -c:v libx265 -pix_fmt yuv420p (pix fmt, only 420 avaliable for gpu dec)
 std::vector<uint64_t> GpuDecoder::getFrames(uint32_t number)
 {
-    AVPacket packet;
-    VdpOutputSurface surface;
-    std::vector<GLuint64> textureHandles;
-    textureHandles.reserve(number);
-    std::vector<GLuint> textures(number);
+    //the clearing can be avoided if we specify a fixed amount for getframes when constructing
+    for(auto surface : vdpSurfaces)
+        vdp_output_surface_destroy(surface);
+    vdpSurfaces.clear();
+    vdpSurfaces.resize(number);
+    textureHandles.clear();
+    textureHandles.resize(number);
+    ge::gl::glDeleteTextures(textures.size(), textures.data());
+    textures.clear();
+    textures.resize(number);
+    
     ge::gl::glCreateTextures(GL_TEXTURE_2D, number, textures.data());
     
-    bool send = (av_read_frame(formatContext, &packet) == 0);
-    for(auto texture : textures)
-    {
+    for(int i=0; i<number; i++)
+    {bool send = true;
         while(send)
         {
             if(packet.stream_index != videoStreamId)
@@ -43,8 +48,9 @@ std::vector<uint64_t> GpuDecoder::getFrames(uint32_t number)
             {
                 av_frame_free(&frame);
                 //TODO reset when asking for more
-            //    avio_seek(formatContext->pb, 0, SEEK_SET);
-              //  av_seek_frame(formatContext, videoStreamId, 0, 0);
+                //avio_seek(formatContext->pb, 0, SEEK_SET);
+                //av_seek_frame(formatContext, videoStreamId, 0, 0);
+                std::cerr<<"END";
                 break;
             }
             else if(err < 0)
@@ -52,19 +58,17 @@ std::vector<uint64_t> GpuDecoder::getFrames(uint32_t number)
             
             if(frame->format == pixFmt)
             {
-                if(vdp_output_surface_create(vdpauContext->device, VDP_RGBA_FORMAT_B8G8R8A8, codecContext->width, codecContext->height, &surface) != VDP_STATUS_OK)
+                if(vdp_output_surface_create(vdpauContext->device, VDP_RGBA_FORMAT_B8G8R8A8, codecContext->width, codecContext->height, &vdpSurfaces[i]) != VDP_STATUS_OK)
                     throw std::runtime_error("Cannot create VDPAU output surface.");
-                if(vdp_video_mixer_render(mixer, VDP_INVALID_HANDLE, nullptr, VDP_VIDEO_MIXER_PICTURE_STRUCTURE_FRAME, 0, nullptr, (VdpVideoSurface)(uintptr_t)frame->data[3], 0, nullptr, &flipRect, surface, nullptr, nullptr, 0, nullptr) != VDP_STATUS_OK)
+                if(vdp_video_mixer_render(mixer, VDP_INVALID_HANDLE, nullptr, VDP_VIDEO_MIXER_PICTURE_STRUCTURE_FRAME, 0, nullptr, (VdpVideoSurface)(uintptr_t)frame->data[3], 0, nullptr, &flipRect, vdpSurfaces[i], nullptr, nullptr, 0, nullptr) != VDP_STATUS_OK)
                     throw std::runtime_error("VDP mixer error!");
                
-                GLuint textureId = texture;
-                GLvdpauSurfaceNV nvSurf = ge::gl::glVDPAURegisterOutputSurfaceNV((void *)(uintptr_t)surface,GL_TEXTURE_2D,1,&textureId);
+                GLvdpauSurfaceNV nvSurf = ge::gl::glVDPAURegisterOutputSurfaceNV((void *)(uintptr_t)vdpSurfaces[i],GL_TEXTURE_2D,1,&textures[i]);
                 ge::gl::glVDPAUSurfaceAccessNV(nvSurf, GL_READ_ONLY);
                 ge::gl::glVDPAUMapSurfacesNV (1, &nvSurf);
                 
-                GLuint64 textureHandle = ge::gl::glGetTextureHandleARB(textureId);
-        		ge::gl::glMakeTextureHandleResidentARB(textureHandle);
-                textureHandles.push_back(textureHandle);
+                textureHandles[i] = ge::gl::glGetTextureHandleARB(textures[i]);
+        		ge::gl::glMakeTextureHandleResidentARB(textureHandles[i]);
                 waitForFrame = false;
            } 
             av_frame_free(&frame);
@@ -74,7 +78,7 @@ std::vector<uint64_t> GpuDecoder::getFrames(uint32_t number)
     return textureHandles; 
 }
 
-GpuDecoder::GpuDecoder(char* path)
+GpuDecoder::GpuDecoder(const char* path)
 {
     formatContext = avformat_alloc_context();
     if(!formatContext)
@@ -140,6 +144,7 @@ GpuDecoder::GpuDecoder(char* path)
 /*    VdpVideoSurfaceGetParameters *vdp_video_surface_get_parameters;
     get_proc_address(k->device, VDP_FUNC_ID_VIDEO_SURFACE_GET_PARAMETERS, (void**)&vdp_video_surface_get_parameters);*/
     get_proc_address(vdpauContext->device, VDP_FUNC_ID_OUTPUT_SURFACE_CREATE, (void**)&vdp_output_surface_create);
+    get_proc_address(vdpauContext->device, VDP_FUNC_ID_OUTPUT_SURFACE_DESTROY, (void**)&vdp_output_surface_destroy);
     get_proc_address(vdpauContext->device, VDP_FUNC_ID_VIDEO_MIXER_CREATE, (void**)&vdp_video_mixer_create);
     get_proc_address(vdpauContext->device, VDP_FUNC_ID_VIDEO_MIXER_RENDER, (void**)&vdp_video_mixer_render);
    
@@ -161,5 +166,7 @@ GpuDecoder::GpuDecoder(char* path)
     if(vdp_video_mixer_create(vdpauContext->device, 0, nullptr, 3, params, param_vals, &mixer) != VDP_STATUS_OK)
         throw std::runtime_error("Cannot create VDPAU mixer.");
 
+    //start reading
+    av_read_frame(formatContext, &packet);
 }
 
