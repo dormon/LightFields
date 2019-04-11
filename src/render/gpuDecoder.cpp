@@ -2,8 +2,13 @@
 
 //convert as -c:v libx265 -pix_fmt yuv420p (pix fmt, only 420 avaliable for gpu dec)
 std::vector<uint64_t> GpuDecoder::getFrames(uint32_t number)
-{
+{ 
     //the clearing can be avoided if we specify a fixed amount for getframes when constructing
+    ge::gl::glVDPAUUnmapSurfacesNV (nvSurfaces.size(), nvSurfaces.data());
+    for(auto surface : nvSurfaces)
+        ge::gl::glVDPAUUnregisterSurfaceNV(surface);
+    nvSurfaces.clear();
+    nvSurfaces.resize(number);
     for(auto surface : vdpSurfaces)
         vdp_output_surface_destroy(surface);
     vdpSurfaces.clear();
@@ -17,7 +22,8 @@ std::vector<uint64_t> GpuDecoder::getFrames(uint32_t number)
     ge::gl::glCreateTextures(GL_TEXTURE_2D, number, textures.data());
     
     for(int i=0; i<number; i++)
-    {bool send = true;
+    {
+        bool send = true;
         while(send)
         {
             if(packet.stream_index != videoStreamId)
@@ -48,8 +54,9 @@ std::vector<uint64_t> GpuDecoder::getFrames(uint32_t number)
             {
                 av_frame_free(&frame);
                 //TODO reset when asking for more
-                //avio_seek(formatContext->pb, 0, SEEK_SET);
-                //av_seek_frame(formatContext, videoStreamId, 0, 0);
+                auto stream = formatContext->streams[videoStreamId];
+                avio_seek(formatContext->pb, 0, SEEK_SET);
+                avformat_seek_file(formatContext, videoStreamId, 0, 0, stream->duration, 0);
                 std::cerr<<"END";
                 break;
             }
@@ -63,9 +70,9 @@ std::vector<uint64_t> GpuDecoder::getFrames(uint32_t number)
                 if(vdp_video_mixer_render(mixer, VDP_INVALID_HANDLE, nullptr, VDP_VIDEO_MIXER_PICTURE_STRUCTURE_FRAME, 0, nullptr, (VdpVideoSurface)(uintptr_t)frame->data[3], 0, nullptr, &flipRect, vdpSurfaces[i], nullptr, nullptr, 0, nullptr) != VDP_STATUS_OK)
                     throw std::runtime_error("VDP mixer error!");
                
-                GLvdpauSurfaceNV nvSurf = ge::gl::glVDPAURegisterOutputSurfaceNV((void *)(uintptr_t)vdpSurfaces[i],GL_TEXTURE_2D,1,&textures[i]);
-                ge::gl::glVDPAUSurfaceAccessNV(nvSurf, GL_READ_ONLY);
-                ge::gl::glVDPAUMapSurfacesNV (1, &nvSurf);
+                nvSurfaces[i] = ge::gl::glVDPAURegisterOutputSurfaceNV((void *)(uintptr_t)vdpSurfaces[i],GL_TEXTURE_2D,1,&textures[i]);
+                ge::gl::glVDPAUSurfaceAccessNV(nvSurfaces[i], GL_READ_ONLY);
+                ge::gl::glVDPAUMapSurfacesNV (1, &nvSurfaces[i]);
                 
                 textureHandles[i] = ge::gl::glGetTextureHandleARB(textures[i]);
         		ge::gl::glMakeTextureHandleResidentARB(textureHandles[i]);

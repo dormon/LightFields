@@ -21,6 +21,7 @@ class GpuDecoder
         std::vector<uint64_t> textureHandles;
         std::vector<uint32_t> textures;
         std::vector<uint32_t> vdpSurfaces;
+        std::vector<long int> nvSurfaces; 
         AVFormatContext *formatContext;    
         AVCodec *codec;
         AVCodecContext *codecContext;
