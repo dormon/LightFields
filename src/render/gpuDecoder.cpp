@@ -1,25 +1,32 @@
 #include <gpuDecoder.h>
 
-//convert as -c:v libx265 -pix_fmt yuv420p (pix fmt, only 420 avaliable for gpu dec)
-std::vector<uint64_t> GpuDecoder::getFrames(uint32_t number)
-{ 
-    //the clearing can be avoided if we specify a fixed amount for getframes when constructing
-    ge::gl::glVDPAUUnmapSurfacesNV (nvSurfaces.size(), nvSurfaces.data());
-    for(auto surface : nvSurfaces)
+void GpuDecoder::recreateBuffer(size_t number)
+{
+    TextureBuffer *currentBuffer = &buffers[bufferIndex]; 
+    ge::gl::glVDPAUUnmapSurfacesNV (currentBuffer->nvSurfaces.size(), currentBuffer->nvSurfaces.data());
+    for(auto surface : currentBuffer->nvSurfaces)
         ge::gl::glVDPAUUnregisterSurfaceNV(surface);
-    nvSurfaces.clear();
-    nvSurfaces.resize(number);
-    for(auto surface : vdpSurfaces)
+    currentBuffer->nvSurfaces.clear();
+    currentBuffer->nvSurfaces.resize(number);
+    for(auto surface : currentBuffer->vdpSurfaces)
         vdp_output_surface_destroy(surface);
-    vdpSurfaces.clear();
-    vdpSurfaces.resize(number);
-    textureHandles.clear();
-    textureHandles.resize(number);
-    ge::gl::glDeleteTextures(textures.size(), textures.data());
-    textures.clear();
-    textures.resize(number);
-    
-    ge::gl::glCreateTextures(GL_TEXTURE_2D, number, textures.data());
+    currentBuffer->vdpSurfaces.clear();
+    currentBuffer->vdpSurfaces.resize(number);
+    currentBuffer->textureHandles.clear();
+    currentBuffer->textureHandles.resize(number);
+    ge::gl::glDeleteTextures(currentBuffer->textures.size(), currentBuffer->textures.data());
+    currentBuffer->textures.clear();
+    currentBuffer->textures.resize(number);
+    ge::gl::glCreateTextures(GL_TEXTURE_2D, number, currentBuffer->textures.data());
+}
+
+//convert as -c:v libx265 -pix_fmt yuv420p (pix fmt, only 420 avaliable for gpu dec)
+std::vector<uint64_t> GpuDecoder::getFrames(size_t number)
+{ 
+    swapBuffers();
+    //the clearing can be avoided if we specify a fixed amount for getframes when constructing
+    recreateBuffer(number);
+    TextureBuffer *currentBuffer = getCurrentBuffer(); 
     
     for(int i=0; i<number; i++)
     {
@@ -54,9 +61,13 @@ std::vector<uint64_t> GpuDecoder::getFrames(uint32_t number)
             {
                 av_frame_free(&frame);
                 //TODO reset when asking for more
-                auto stream = formatContext->streams[videoStreamId];
+              /*  auto stream = formatContext->streams[videoStreamId];
                 avio_seek(formatContext->pb, 0, SEEK_SET);
-                avformat_seek_file(formatContext, videoStreamId, 0, 0, stream->duration, 0);
+                //avformat_seek_file(formatContext, videoStreamId, 0, 0, stream->duration, 0);*/
+//                avcodec_flush_buffers(codecContext);
+                av_seek_frame(formatContext, videoStreamId, 0, 0);
+                avcodec_flush_buffers(codecContext);
+                av_read_frame(formatContext, &packet);
                 std::cerr<<"END";
                 break;
             }
@@ -65,24 +76,23 @@ std::vector<uint64_t> GpuDecoder::getFrames(uint32_t number)
             
             if(frame->format == pixFmt)
             {
-                if(vdp_output_surface_create(vdpauContext->device, VDP_RGBA_FORMAT_B8G8R8A8, codecContext->width, codecContext->height, &vdpSurfaces[i]) != VDP_STATUS_OK)
+                if(vdp_output_surface_create(vdpauContext->device, VDP_RGBA_FORMAT_B8G8R8A8, codecContext->width, codecContext->height, &currentBuffer->vdpSurfaces[i]) != VDP_STATUS_OK)
                     throw std::runtime_error("Cannot create VDPAU output surface.");
-                if(vdp_video_mixer_render(mixer, VDP_INVALID_HANDLE, nullptr, VDP_VIDEO_MIXER_PICTURE_STRUCTURE_FRAME, 0, nullptr, (VdpVideoSurface)(uintptr_t)frame->data[3], 0, nullptr, &flipRect, vdpSurfaces[i], nullptr, nullptr, 0, nullptr) != VDP_STATUS_OK)
+                if(vdp_video_mixer_render(mixer, VDP_INVALID_HANDLE, nullptr, VDP_VIDEO_MIXER_PICTURE_STRUCTURE_FRAME, 0, nullptr, (VdpVideoSurface)(uintptr_t)frame->data[3], 0, nullptr, &flipRect, currentBuffer->vdpSurfaces[i], nullptr, nullptr, 0, nullptr) != VDP_STATUS_OK)
                     throw std::runtime_error("VDP mixer error!");
                
-                nvSurfaces[i] = ge::gl::glVDPAURegisterOutputSurfaceNV((void *)(uintptr_t)vdpSurfaces[i],GL_TEXTURE_2D,1,&textures[i]);
-                ge::gl::glVDPAUSurfaceAccessNV(nvSurfaces[i], GL_READ_ONLY);
-                ge::gl::glVDPAUMapSurfacesNV (1, &nvSurfaces[i]);
+                currentBuffer->nvSurfaces[i] = ge::gl::glVDPAURegisterOutputSurfaceNV((void *)(uintptr_t)currentBuffer->vdpSurfaces[i],GL_TEXTURE_2D,1,&currentBuffer->textures[i]);
+                ge::gl::glVDPAUSurfaceAccessNV(currentBuffer->nvSurfaces[i], GL_READ_ONLY);
+                ge::gl::glVDPAUMapSurfacesNV (1, &currentBuffer->nvSurfaces[i]);
                 
-                textureHandles[i] = ge::gl::glGetTextureHandleARB(textures[i]);
-        		ge::gl::glMakeTextureHandleResidentARB(textureHandles[i]);
+                currentBuffer->textureHandles[i] = ge::gl::glGetTextureHandleARB(currentBuffer->textures[i]);
+        		ge::gl::glMakeTextureHandleResidentARB(currentBuffer->textureHandles[i]);
                 waitForFrame = false;
            } 
             av_frame_free(&frame);
         }    
     }
-
-    return textureHandles; 
+    return currentBuffer->textureHandles; 
 }
 
 GpuDecoder::GpuDecoder(const char* path)

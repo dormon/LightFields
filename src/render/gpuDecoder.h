@@ -14,14 +14,26 @@ extern "C" {
 class GpuDecoder
 {
     public:
-        std::vector<uint64_t> getFrames(uint32_t number);
+        std::vector<uint64_t> getFrames(size_t number);
         GpuDecoder(const char* path);
+        //active means the one that is currently being loaded or is now prepared for loading
+        int getActiveBufferIndex() {return bufferIndex;}
         
     private:
-        std::vector<uint64_t> textureHandles;
-        std::vector<uint32_t> textures;
-        std::vector<uint32_t> vdpSurfaces;
-        std::vector<long int> nvSurfaces; 
+        static constexpr int BUFFER_COUNT{2};
+        struct TextureBuffer
+        {
+            std::vector<uint64_t> textureHandles;
+            std::vector<uint32_t> textures;
+            std::vector<uint32_t> vdpSurfaces;
+            std::vector<long int> nvSurfaces; 
+        } buffers[BUFFER_COUNT];
+
+        TextureBuffer* getCurrentBuffer() {return &buffers[bufferIndex];};
+        void swapBuffers() {bufferIndex ^= 1;}; //(bufferIndex+1)%BUFFER_COUNT;};
+        void recreateBuffer(size_t number);
+
+        int bufferIndex{0};
         AVFormatContext *formatContext;    
         AVCodec *codec;
         AVCodecContext *codecContext;

@@ -26,43 +26,6 @@
 
 namespace fs = std::experimental::filesystem;
 
-std::vector<std::string>getDirectoryImages(std::string const&dir)
-{
-    if(!fs::is_directory(dir))
-        throw std::invalid_argument(std::string("path: ")+dir+" is not directory");
-    std::vector<std::string>result;
-    for(auto& p: fs::directory_iterator(dir))
-        result.push_back(p.path().c_str());
-    return result;
-}
-
-std::vector<std::string>sortImages(std::vector<std::string>const&imgs)
-{
-    std::vector<std::string>res = imgs;
-    std::regex number(".*[^0-9]([0-9]+)\\..*");
-    for(size_t i=0; i<res.size(); ++i)
-        for(size_t i=0; i<res.size()-1; ++i)
-        {
-            auto a = res.at(i);
-            auto b = res.at(i+1);
-            auto an = std::atoi(std::regex_replace(a,number,"$1").c_str());
-            auto bn = std::atoi(std::regex_replace(b,number,"$1").c_str());
-            if(an>bn)
-            {
-                res[i] = b;
-                res[i+1] = a;
-            }
-        }
-    return res;
-}
-
-std::vector<std::string>getLightFieldImageNames(std::string const&d)
-{
-    return sortImages(getDirectoryImages(d));
-}
-
-
-
 class LightFields: public simple3DApp::Application
 {
 public:
@@ -145,63 +108,6 @@ void createCamera(vars::Vars&vars)
     createView(vars);
 }
 
-int loadLfImage(vars::Vars&vars, const char* path, bool depth)
-{
-    //if(notChanged(vars,"all",__FUNCTION__, {}))return;
-
-    auto imgs = getLightFieldImageNames(path);
-
-    fipImage img;
-    FIBITMAP* bm;
-    uint32_t width = 0;
-    uint32_t height = 0;
-    ge::gl::Texture*tex;
-    uint32_t counter = 0;
-	uint32_t format = GL_RGB8;
-	uint32_t type = GL_UNSIGNED_BYTE;
-	uint32_t loadFormat = GL_BGR;
-
-    std::cout << "Loading images:" << std::endl;
-    for(auto const&i:imgs)
-    {
-        std::cout << '.' << std::flush;
-        img.load(i.c_str());
-        if(width == 0)
-        {
-            width = img.getWidth();
-            height = img.getHeight();
-			std::string name = "texture";
-			if(!depth)
-			{
-				name = "texture.color";
-			}
-			else
-			{
-				name = "texture.depth";
-				type = GL_FLOAT;
-				format = GL_RGBA32F;
-				loadFormat = GL_RGBA;
-
-                /*img.convertToGrayscale();
-	            type = GL_UNSIGNED_BYTE;
-                format = GL_R8;
-                loadFormat = GL_RED;*/
-			}
-            tex = vars.reCreate<ge::gl::Texture>(name.c_str(),GL_TEXTURE_2D_ARRAY,format,1,width,height,imgs.size());
-        }
-        //tex->setData3D((void*)FreeImage_GetBits(img),loadFormat,type,0,GL_TEXTURE_2D_ARRAY,0,0,counter++,width,height,1);
-        ge::gl::glTextureSubImage3D(tex->getId(), 0, 0,0, counter++, width, height, 1, loadFormat, type, (void*)FreeImage_GetBits(img));
-        tex->texParameteri(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-        tex->texParameteri(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-    }
-    std::cout << std::endl;
-
-
-	if(!depth)	
-    	vars.addFloat("texture.aspect",(float)width/(float)height);
-
-    return imgs.size();
-}
 
 void loadTextures(vars::Vars&vars)
 {
@@ -242,8 +148,6 @@ void loadGeometry(vars::Vars&vars)
 
     vbo = vars.add<ge::gl::Buffer>("vboUv",scene->mMeshes[0]->mNumVertices*sizeof(GL_FLOAT)*2, texCoords.data());
 	vao->addAttrib(vbo,ATTR_UV,2,GL_FLOAT,2*sizeof(GL_FLOAT),0);
-    //vbo = vars.add<ge::gl::Buffer>("vboUv",scene->mMeshes[0]->mNumVertices*sizeof(aiVector3D), scene->mMeshes[0]->mTextureCoords);
-//	vao->addAttrib(vbo,ATTR_UV,2,GL_FLOAT,3*sizeof(GL_FLOAT),0);
 }
 
 void LightFields::init()
@@ -270,7 +174,9 @@ void LightFields::init()
     loadTextures(vars);
     loadGeometry(vars);
 
-    //auto tex = vars.get<ge::gl::Texture>("texture.color");
+    vars.addUint32("lfTexturesIndex", 0);
+    vars.reCreateVector<GLuint64>("lfTextures0", vars.get<GpuDecoder>("decoder")->getFrames(64));
+
     auto grid = vars.get<glm::uvec2>("gridSize");
     auto stats = vars.add<ge::gl::Buffer>("statistics",vars.getUint32("lf.width")*vars.getUint32("lf.height")*grid->x*grid->y*4);
     unsigned int c=0;
@@ -280,9 +186,24 @@ void LightFields::init()
     ge::gl::glEnable(GL_DEPTH_TEST);
 }
 
+void asyncVideoLoading(vars::Vars&vars)
+{
+    
+ 
+    vars.getUint32("lfTexturesIndex") = (vars.get<GpuDecoder>("decoder")->getActiveBufferIndex());
+}
+
 void LightFields::draw()
 {
-    vars.reCreateVector<GLuint64>("lfTextures", vars.get<GpuDecoder>("decoder")->getFrames(64));
+    //THREAD LOADING, SYNC PO RENDERU NA CPU A PRIDAT GL FENCE U OBOU
+
+    uint32_t texturesIndex = vars.getUint32("lfTexturesIndex");
+    std::string currentTexturesName = "lfTextures" + std::to_string(texturesIndex);
+    texturesIndex ^= 1;
+    vars.getUint32("lfTexturesIndex") = texturesIndex;
+    std::string nextTexturesName = "lfTextures" + std::to_string(texturesIndex);
+    vars.reCreateVector<GLuint64>(nextTexturesName, vars.get<GpuDecoder>("decoder")->getFrames(64));
+    
     auto start = std::chrono::steady_clock::now();
 
     createCamera(vars);
@@ -294,9 +215,6 @@ void LightFields::draw()
     auto projection = vars.get<basicCamera::PerspectiveCamera>("projection");
 
     drawGrid(vars);
-
-    //ge::gl::glBindTextureUnit(0,vars.get<ge::gl::Texture>("texture.color")->getId());
-    //ge::gl::glBindTextureUnit(1,vars.get<ge::gl::Texture>("texture.depth")->getId()); 
 
     ge::gl::glBindTextureUnit(2,vars.get<ge::gl::Texture>("geomTexture")->getId());
     
@@ -322,7 +240,7 @@ void LightFields::draw()
     ->use();
 
     vars.get<ge::gl::Buffer>("statistics")->bind(GL_SHADER_STORAGE_BUFFER);
-    ge::gl::glProgramUniformHandleui64vARB(program->getId(), program->getUniformLocation("lfTextures"), 64, vars.getVector<GLuint64>("lfTextures").data());
+    ge::gl::glProgramUniformHandleui64vARB(program->getId(), program->getUniformLocation("lfTextures"), 64, vars.getVector<GLuint64>(currentTexturesName).data());
 
     ge::gl::glDrawArrays(GL_TRIANGLE_STRIP,0,4);
     vars.get<ge::gl::VertexArray>("emptyVao")->unbind();
