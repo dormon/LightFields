@@ -76,17 +76,24 @@ std::vector<uint64_t> GpuDecoder::getFrames(size_t number)
             
             if(frame->format == pixFmt)
             {
+                //TODO compare to fragment shader conversion without mixer
                 if(vdp_output_surface_create(vdpauContext->device, VDP_RGBA_FORMAT_B8G8R8A8, codecContext->width, codecContext->height, &currentBuffer->vdpSurfaces[i]) != VDP_STATUS_OK)
                     throw std::runtime_error("Cannot create VDPAU output surface.");
                 if(vdp_video_mixer_render(mixer, VDP_INVALID_HANDLE, nullptr, VDP_VIDEO_MIXER_PICTURE_STRUCTURE_FRAME, 0, nullptr, (VdpVideoSurface)(uintptr_t)frame->data[3], 0, nullptr, &flipRect, currentBuffer->vdpSurfaces[i], nullptr, nullptr, 0, nullptr) != VDP_STATUS_OK)
                     throw std::runtime_error("VDP mixer error!");
+
+                std::cerr<< currentBuffer->vdpSurfaces[i] << "-";
                
                 currentBuffer->nvSurfaces[i] = ge::gl::glVDPAURegisterOutputSurfaceNV((void *)(uintptr_t)currentBuffer->vdpSurfaces[i],GL_TEXTURE_2D,1,&currentBuffer->textures[i]);
+                
+                std::cerr<< currentBuffer->textures[i] << " ";
+
                 ge::gl::glVDPAUSurfaceAccessNV(currentBuffer->nvSurfaces[i], GL_READ_ONLY);
                 ge::gl::glVDPAUMapSurfacesNV (1, &currentBuffer->nvSurfaces[i]);
                 
                 currentBuffer->textureHandles[i] = ge::gl::glGetTextureHandleARB(currentBuffer->textures[i]);
         		ge::gl::glMakeTextureHandleResidentARB(currentBuffer->textureHandles[i]);
+
                 waitForFrame = false;
            } 
             av_frame_free(&frame);

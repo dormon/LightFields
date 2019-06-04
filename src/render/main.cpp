@@ -15,6 +15,7 @@
 #include <CL/cl.h>
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
+#include <SDL2CPP/Exception.h>
 
 #include <gpuDecoder.h>
 
@@ -110,10 +111,7 @@ void createCamera(vars::Vars&vars)
 
 
 void loadTextures(vars::Vars&vars)
-{
-	//int size = loadLfImage(vars, "../data/pavfhd", false);
-    vars.add<GpuDecoder>("decoder", GpuDecoder("../data/video.mkv"));
-    
+{ 
     uint32_t size = 8;
     vars.addUint32("lf.width", 1920);
     vars.addUint32("lf.height", 1080);
@@ -150,8 +148,53 @@ void loadGeometry(vars::Vars&vars)
 	vao->addAttrib(vbo,ATTR_UV,2,GL_FLOAT,2*sizeof(GL_FLOAT),0);
 }
 
+void asyncVideoLoading(vars::Vars &vars)
+{
+    SDL_GLContext c = SDL_GL_CreateContext(*vars.get<SDL_Window*>("mainWindow")); 
+    SDL_GL_MakeCurrent(*vars.get<SDL_Window*>("mainWindow"),c);
+    ge::gl::init(SDL_GL_GetProcAddress);
+    ge::gl::setHighDebugMessage();
+
+    auto decoder = std::make_unique<GpuDecoder>( "../data/video.mkv");    
+
+    int index = decoder->getActiveBufferIndex();
+    std::string nextTexturesName = "lfTextures" + std::to_string(index);
+    //TODO id this copy deep?
+    vars.reCreateVector<GLuint64>(nextTexturesName, decoder->getFrames(64));
+    
+    GLsync fence = ge::gl::glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0);
+    ge::gl::glClientWaitSync(fence, GL_SYNC_FLUSH_COMMANDS_BIT, 9999999);
+ 
+    vars.getUint32("lfTexturesIndex") = index;
+    SDL_GL_MakeCurrent(*vars.get<SDL_Window*>("mainWindow"), NULL);
+
+//    while(1){} 
+}
+
 void LightFields::init()
 {
+    window->createContext("loading", 450u, sdl2cpp::Window::CORE, sdl2cpp::Window::DEBUG);
+    vars.add<SDL_GLContext>("loadingContext", window->getContext("loading"));
+    vars.add<SDL_GLContext>("renderingContext", window->getContext("rendering"));
+    vars.add<SDL_Window*>("mainWindow", window->getWindow());
+    SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 1);  
+    
+    vars.addUint32("lfTexturesIndex", 0);
+    //asyncVideoLoading(vars);
+    vars.add<std::thread>("loadingThread",asyncVideoLoading, std::ref(vars));
+    vars.get<std::thread>("loadingThread")->join();
+    
+    std::string currentTexturesName = "lfTextures" + std::to_string(vars.getUint32("lfTexturesIndex"));
+    auto v = vars.getVector<GLuint64>(currentTexturesName);
+    for(auto vv : v)
+        std::cerr << vv << " ";
+ 
+    SDL_GL_MakeCurrent(*vars.get<SDL_Window*>("mainWindow"),window->getContext("rendering"));
+    std::vector<GLuint64> t = vars.getVector<GLuint64>(currentTexturesName);
+    for(auto a : t)
+       	ge::gl::glMakeTextureHandleResidentARB(a);
+
+    //asyncVideoLoading(vars);
     vars.add<ge::gl::VertexArray>("emptyVao");
     vars.addFloat("input.sensitivity",0.01f);
     vars.add<glm::uvec2>("windowSize",window->getWidth(),window->getHeight());
@@ -174,9 +217,6 @@ void LightFields::init()
     loadTextures(vars);
     loadGeometry(vars);
 
-    vars.addUint32("lfTexturesIndex", 0);
-    vars.reCreateVector<GLuint64>("lfTextures0", vars.get<GpuDecoder>("decoder")->getFrames(64));
-
     auto grid = vars.get<glm::uvec2>("gridSize");
     auto stats = vars.add<ge::gl::Buffer>("statistics",vars.getUint32("lf.width")*vars.getUint32("lf.height")*grid->x*grid->y*4);
     unsigned int c=0;
@@ -186,23 +226,12 @@ void LightFields::init()
     ge::gl::glEnable(GL_DEPTH_TEST);
 }
 
-void asyncVideoLoading(vars::Vars&vars)
-{
-    
- 
-    vars.getUint32("lfTexturesIndex") = (vars.get<GpuDecoder>("decoder")->getActiveBufferIndex());
-}
-
 void LightFields::draw()
 {
     //THREAD LOADING, SYNC PO RENDERU NA CPU A PRIDAT GL FENCE U OBOU
+    std::string currentTexturesName = "lfTextures" + std::to_string(vars.getUint32("lfTexturesIndex"));
 
-    uint32_t texturesIndex = vars.getUint32("lfTexturesIndex");
-    std::string currentTexturesName = "lfTextures" + std::to_string(texturesIndex);
-    texturesIndex ^= 1;
-    vars.getUint32("lfTexturesIndex") = texturesIndex;
-    std::string nextTexturesName = "lfTextures" + std::to_string(texturesIndex);
-    vars.reCreateVector<GLuint64>(nextTexturesName, vars.get<GpuDecoder>("decoder")->getFrames(64));
+    //TODO move to init and cycle
     
     auto start = std::chrono::steady_clock::now();
 
@@ -289,7 +318,10 @@ void LightFields::draw()
     
     drawImguiVars(vars);
     ImGui::LabelText("freeMemory","%i MB",nCurAvailMemoryInKB / 1024);
-    swap();    
+    swap();
+
+    GLsync fence = ge::gl::glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0);
+    ge::gl::glClientWaitSync(fence, GL_SYNC_FLUSH_COMMANDS_BIT, 9999999);
 /*
     auto end = std::chrono::steady_clock::now();
     constexpr int frameTime = 41;
@@ -351,7 +383,14 @@ void LightFields::resize(uint32_t x,uint32_t y)
 
 int main(int argc,char*argv[])
 {
+    try
+    {
     LightFields app{argc, argv};
     app.start();
+    }
+    catch(sdl2cpp::ex::Exception &e)
+    {
+    std::cerr << e.what();
+   }
     return EXIT_SUCCESS;
 }
