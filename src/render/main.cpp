@@ -23,6 +23,8 @@
 #include<sstream>
 #include<string>
 #include<thread>
+#include<mutex>
+#include<condition_variable>
 
 
 namespace fs = std::experimental::filesystem;
@@ -155,20 +157,26 @@ void asyncVideoLoading(vars::Vars &vars)
     ge::gl::init(SDL_GL_GetProcAddress);
     ge::gl::setHighDebugMessage();
 
-    auto decoder = std::make_unique<GpuDecoder>( "../data/video.mkv");    
-
-    int index = decoder->getActiveBufferIndex();
-    std::string nextTexturesName = "lfTextures" + std::to_string(index);
-    //TODO id this copy deep?
-    vars.reCreateVector<GLuint64>(nextTexturesName, decoder->getFrames(64));
+    auto decoder = std::make_unique<GpuDecoder>( "../data/video.mkv");
+  
+    auto rdyMutex = vars.get<std::mutex>("rdyMutex");
+    auto rdyCv = vars.get<std::condition_variable>("rdyCv");
     
-    GLsync fence = ge::gl::glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0);
-    ge::gl::glClientWaitSync(fence, GL_SYNC_FLUSH_COMMANDS_BIT, 9999999);
- 
-    vars.getUint32("lfTexturesIndex") = index;
-    SDL_GL_MakeCurrent(*vars.get<SDL_Window*>("mainWindow"), NULL);
+    while(true)
+    {
+        int index = decoder->getActiveBufferIndex();
+        std::string nextTexturesName = "lfTextures" + std::to_string(index);
+        //TODO id this copy deep?
+        vars.reCreateVector<GLuint64>(nextTexturesName, decoder->getFrames(64));
+        
+        GLsync fence = ge::gl::glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0);
+        ge::gl::glClientWaitSync(fence, GL_SYNC_FLUSH_COMMANDS_BIT, 9999999);
+    
+        vars.getUint32("lfTexturesIndex") = index;
 
-//    while(1){} 
+        vars.getBool("loaded") = true;
+        rdyCv->notify_all();
+    }
 }
 
 void LightFields::init()
@@ -181,20 +189,19 @@ void LightFields::init()
     
     vars.addUint32("lfTexturesIndex", 0);
     //asyncVideoLoading(vars);
+    auto rdyMutex = vars.add<std::mutex>("rdyMutex");
+    auto rdyCv = vars.add<std::condition_variable>("rdyCv");
+    vars.addBool("loaded", false);
     vars.add<std::thread>("loadingThread",asyncVideoLoading, std::ref(vars));
-    vars.get<std::thread>("loadingThread")->join();
-    
+    {
+        std::unique_lock<std::mutex> lck(*rdyMutex);
+        rdyCv->wait(lck, [this]{return vars.getBool("loaded");});
+    }
+
     std::string currentTexturesName = "lfTextures" + std::to_string(vars.getUint32("lfTexturesIndex"));
-    auto v = vars.getVector<GLuint64>(currentTexturesName);
-    for(auto vv : v)
-        std::cerr << vv << " ";
  
     SDL_GL_MakeCurrent(*vars.get<SDL_Window*>("mainWindow"),window->getContext("rendering"));
-    std::vector<GLuint64> t = vars.getVector<GLuint64>(currentTexturesName);
-    for(auto a : t)
-       	ge::gl::glMakeTextureHandleResidentARB(a);
 
-    //asyncVideoLoading(vars);
     vars.add<ge::gl::VertexArray>("emptyVao");
     vars.addFloat("input.sensitivity",0.01f);
     vars.add<glm::uvec2>("windowSize",window->getWidth(),window->getHeight());
@@ -230,7 +237,9 @@ void LightFields::draw()
 {
     //THREAD LOADING, SYNC PO RENDERU NA CPU A PRIDAT GL FENCE U OBOU
     std::string currentTexturesName = "lfTextures" + std::to_string(vars.getUint32("lfTexturesIndex"));
-
+    std::vector<GLuint64> t = vars.getVector<GLuint64>(currentTexturesName);
+    for(auto a : t)
+       	ge::gl::glMakeTextureHandleResidentARB(a);
     //TODO move to init and cycle
     
     auto start = std::chrono::steady_clock::now();
@@ -322,6 +331,21 @@ void LightFields::draw()
 
     GLsync fence = ge::gl::glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0);
     ge::gl::glClientWaitSync(fence, GL_SYNC_FLUSH_COMMANDS_BIT, 9999999);
+
+    //std::vector<GLuint64> t = vars.getVector<GLuint64>(currentTexturesName);
+    for(auto a : t)
+       	ge::gl::glMakeTextureHandleNonResidentARB(a);
+
+    auto rdyMutex = vars.get<std::mutex>("rdyMutex");
+    auto rdyCv = vars.get<std::condition_variable>("rdyCv");
+    {
+        std::unique_lock<std::mutex> lck(*rdyMutex);
+        rdyCv->wait(lck, [this]{return vars.getBool("loaded");});
+    }
+    /*auto v = vars.getVector<GLuint64>(currentTexturesName);
+    for(auto vv : v)
+        std::cerr << vv << " ";
+    std::cerr << std::endl;*/
 /*
     auto end = std::chrono::steady_clock::now();
     constexpr int frameTime = 41;
@@ -383,14 +407,15 @@ void LightFields::resize(uint32_t x,uint32_t y)
 
 int main(int argc,char*argv[])
 {
+    LightFields app{argc, argv};
     try
     {
-    LightFields app{argc, argv};
     app.start();
     }
     catch(sdl2cpp::ex::Exception &e)
     {
     std::cerr << e.what();
    }
+    app.vars.get<std::thread>("loadingThread")->join();
     return EXIT_SUCCESS;
 }
