@@ -69,6 +69,7 @@ std::vector<uint64_t> GpuDecoder::getFrames(size_t number)
                 avcodec_flush_buffers(codecContext);
                 av_read_frame(formatContext, &packet);
                 std::cerr<<"END";
+                //waitForFrame = false;
                 break;
             }
             else if(err < 0)
@@ -91,10 +92,12 @@ std::vector<uint64_t> GpuDecoder::getFrames(size_t number)
         		ge::gl::glMakeTextureHandleResidentARB(currentBuffer->textureHandles[i]);
 
                 waitForFrame = false;
+                //std::cerr << i << " ";
            } 
             av_frame_free(&frame);
         }    
     }
+    // std::cerr << std::endl;
     return currentBuffer->textureHandles; 
 }
 

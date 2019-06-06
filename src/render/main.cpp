@@ -26,7 +26,6 @@
 #include<mutex>
 #include<condition_variable>
 
-
 namespace fs = std::experimental::filesystem;
 
 class LightFields: public simple3DApp::Application
@@ -111,7 +110,6 @@ void createCamera(vars::Vars&vars)
     createView(vars);
 }
 
-
 void loadTextures(vars::Vars&vars)
 { 
     uint32_t size = 8;
@@ -148,6 +146,7 @@ void loadGeometry(vars::Vars&vars)
 
     vbo = vars.add<ge::gl::Buffer>("vboUv",scene->mMeshes[0]->mNumVertices*sizeof(GL_FLOAT)*2, texCoords.data());
 	vao->addAttrib(vbo,ATTR_UV,2,GL_FLOAT,2*sizeof(GL_FLOAT),0);
+    vars.addUint32("trianglesNum", scene->mMeshes[0]->mNumVertices);
 }
 
 void asyncVideoLoading(vars::Vars &vars)
@@ -174,8 +173,9 @@ void asyncVideoLoading(vars::Vars &vars)
     
         vars.getUint32("lfTexturesIndex") = index;
 
+        //TODO without waiting? async draw to increase responsitivity
         vars.getBool("loaded") = true;
-        rdyCv->notify_all();
+        rdyCv->notify_all();   
     }
 }
 
@@ -188,7 +188,6 @@ void LightFields::init()
     SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 1);  
     
     vars.addUint32("lfTexturesIndex", 0);
-    //asyncVideoLoading(vars);
     auto rdyMutex = vars.add<std::mutex>("rdyMutex");
     auto rdyCv = vars.add<std::condition_variable>("rdyCv");
     vars.addBool("loaded", false);
@@ -199,6 +198,9 @@ void LightFields::init()
     }
 
     std::string currentTexturesName = "lfTextures" + std::to_string(vars.getUint32("lfTexturesIndex"));
+    std::vector<GLuint64> t = vars.getVector<GLuint64>(currentTexturesName);
+    for(auto a : t)
+       	ge::gl::glMakeTextureHandleResidentARB(a);
  
     SDL_GL_MakeCurrent(*vars.get<SDL_Window*>("mainWindow"),window->getContext("rendering"));
 
@@ -235,12 +237,11 @@ void LightFields::init()
 
 void LightFields::draw()
 {
-    //THREAD LOADING, SYNC PO RENDERU NA CPU A PRIDAT GL FENCE U OBOU
     std::string currentTexturesName = "lfTextures" + std::to_string(vars.getUint32("lfTexturesIndex"));
+    
     std::vector<GLuint64> t = vars.getVector<GLuint64>(currentTexturesName);
     for(auto a : t)
        	ge::gl::glMakeTextureHandleResidentARB(a);
-    //TODO move to init and cycle
     
     auto start = std::chrono::steady_clock::now();
 
@@ -289,7 +290,7 @@ void LightFields::draw()
     ->use();
     vars.get<ge::gl::VertexArray>("vao")->bind();
       
-    ge::gl::glDrawArrays(GL_TRIANGLES,0,1000);
+    ge::gl::glDrawArrays(GL_TRIANGLES,0,vars.getUint32("trianglesNum"));
 
     vars.get<ge::gl::Buffer>("statistics")->unbind(GL_SHADER_STORAGE_BUFFER);
     vars.get<ge::gl::VertexArray>("vao")->unbind();
@@ -332,7 +333,7 @@ void LightFields::draw()
     GLsync fence = ge::gl::glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0);
     ge::gl::glClientWaitSync(fence, GL_SYNC_FLUSH_COMMANDS_BIT, 9999999);
 
-    //std::vector<GLuint64> t = vars.getVector<GLuint64>(currentTexturesName);
+    
     for(auto a : t)
        	ge::gl::glMakeTextureHandleNonResidentARB(a);
 
@@ -342,10 +343,9 @@ void LightFields::draw()
         std::unique_lock<std::mutex> lck(*rdyMutex);
         rdyCv->wait(lck, [this]{return vars.getBool("loaded");});
     }
-    /*auto v = vars.getVector<GLuint64>(currentTexturesName);
-    for(auto vv : v)
-        std::cerr << vv << " ";
-    std::cerr << std::endl;*/
+    vars.getBool("loaded") = false;
+
+
 /*
     auto end = std::chrono::steady_clock::now();
     constexpr int frameTime = 41;
