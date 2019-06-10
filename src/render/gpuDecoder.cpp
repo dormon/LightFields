@@ -127,6 +127,8 @@ GpuDecoder::GpuDecoder(const char* path)
     if(avcodec_parameters_to_context(codecContext, formatContext->streams[videoStreamId]->codecpar)<0)
         throw std::runtime_error{"Cannot use the file parameters in context"};
 
+    bestStreamLength = formatContext->duration;
+
     const AVCodecHWConfig *config;
     for(int i=0;; i++)
     {

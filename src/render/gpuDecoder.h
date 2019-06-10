@@ -18,6 +18,7 @@ class GpuDecoder
         GpuDecoder(const char* path);
         //active means the one that is currently being loaded or is now prepared for loading
         int getActiveBufferIndex() {return bufferIndex;}
+        int getLength() {return bestStreamLength;};
         
     private:
         static constexpr int BUFFER_COUNT{2};
@@ -34,6 +35,7 @@ class GpuDecoder
         void recreateBuffer(size_t number);
 
         int bufferIndex{0};
+        int bestStreamLength{0};
         AVFormatContext *formatContext;    
         AVCodec *codec;
         AVCodecContext *codecContext;

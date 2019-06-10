@@ -157,24 +157,36 @@ void asyncVideoLoading(vars::Vars &vars)
     ge::gl::setHighDebugMessage();
 
     auto decoder = std::make_unique<GpuDecoder>( "../data/video.mkv");
+    //TODO get info from mkv about cams
+    auto length = vars.addUint32("length",static_cast<int>(decoder->getLength()/64000000.0*25));
   
     auto rdyMutex = vars.get<std::mutex>("rdyMutex");
     auto rdyCv = vars.get<std::condition_variable>("rdyCv");
-    
-    while(true)
+    auto mainRuns = vars.get<bool>("mainRuns");
+    int frameNum = 1;   
+ 
+    while(mainRuns)
     {
-        int index = decoder->getActiveBufferIndex();
-        std::string nextTexturesName = "lfTextures" + std::to_string(index);
-        //TODO id this copy deep?
-        vars.reCreateVector<GLuint64>(nextTexturesName, decoder->getFrames(64));
+        if(frameNum > length)
+            frameNum = 1;
+        if(!vars.getBool("pause"))
+        {
+            int index = decoder->getActiveBufferIndex();
+            std::string nextTexturesName = "lfTextures" + std::to_string(index);
+            //TODO id this copy deep?
+            vars.reCreateVector<GLuint64>(nextTexturesName, decoder->getFrames(64));
+            
+            GLsync fence = ge::gl::glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0);
+            ge::gl::glClientWaitSync(fence, GL_SYNC_FLUSH_COMMANDS_BIT, 9999999);
         
-        GLsync fence = ge::gl::glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0);
-        ge::gl::glClientWaitSync(fence, GL_SYNC_FLUSH_COMMANDS_BIT, 9999999);
-    
-        vars.getUint32("lfTexturesIndex") = index;
+            vars.getUint32("lfTexturesIndex") = index;
 
-        //TODO without waiting? async draw to increase responsitivity
-        vars.getBool("loaded") = true;
+            //TODO without waiting? async draw to increase responsitivity
+            frameNum++;
+            vars.reCreate<int>("frameNum", frameNum);
+        }
+        //TODO sleep according to FPS
+        vars.getBool("loaded") = true; 
         rdyCv->notify_all();   
     }
 }
@@ -187,6 +199,8 @@ void LightFields::init()
     vars.add<SDL_Window*>("mainWindow", window->getWindow());
     SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 1);  
     
+    vars.addBool("mainRuns", true);
+    vars.addBool("pause", false);
     vars.addUint32("lfTexturesIndex", 0);
     auto rdyMutex = vars.add<std::mutex>("rdyMutex");
     auto rdyCv = vars.add<std::condition_variable>("rdyCv");
@@ -326,8 +340,12 @@ void LightFields::draw()
         vars.getBool("printStats") = false;
     }
     
-    drawImguiVars(vars);
-    ImGui::LabelText("freeMemory","%i MB",nCurAvailMemoryInKB / 1024);
+    //drawImguiVars(vars);
+    //ImGui::LabelText("freeMemory","%i MB",nCurAvailMemoryInKB / 1024);
+    ImGui::Begin("Playback");
+    ImGui::SliderInt("Timeline", vars.get<int>("frameNum"), 1, vars.getUint32("length"));
+    ImGui::Selectable("Pause", &vars.getBool("pause"));
+    ImGui::End();
     swap();
 
     GLsync fence = ge::gl::glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0);
@@ -361,7 +379,10 @@ void LightFields::key(SDL_Event const& event, bool DOWN)
     (*keys)[event.key.keysym.sym] = DOWN;
 
     if(event.key.keysym.sym == SDLK_ESCAPE)
+    {
+        vars.getBool("mainRuns") = false;
         exit(0); //I know, dirty...
+    }
 }
 
 void LightFields::mouseMove(SDL_Event const& e)
