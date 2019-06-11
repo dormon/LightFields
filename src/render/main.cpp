@@ -167,6 +167,15 @@ void asyncVideoLoading(vars::Vars &vars)
  
     while(mainRuns)
     {
+    
+        int seekFrame = *vars.get<int>("seekFrame");
+        if(seekFrame > -1)
+        {
+            decoder->seek(seekFrame*64);
+            frameNum = seekFrame; 
+            vars.reCreate<int>("seekFrame", -1);
+        }
+
         if(frameNum > length)
             frameNum = 1;
         if(!vars.getBool("pause"))
@@ -201,6 +210,7 @@ void LightFields::init()
     
     vars.addBool("mainRuns", true);
     vars.addBool("pause", false);
+    vars.add<int>("seekFrame", -1);
     vars.addUint32("lfTexturesIndex", 0);
     auto rdyMutex = vars.add<std::mutex>("rdyMutex");
     auto rdyCv = vars.add<std::condition_variable>("rdyCv");
@@ -343,7 +353,8 @@ void LightFields::draw()
     //drawImguiVars(vars);
     //ImGui::LabelText("freeMemory","%i MB",nCurAvailMemoryInKB / 1024);
     ImGui::Begin("Playback");
-    ImGui::SliderInt("Timeline", vars.get<int>("frameNum"), 1, vars.getUint32("length"));
+    if(ImGui::SliderInt("Timeline", vars.get<int>("frameNum"), 1, vars.getUint32("length")))
+        vars.reCreate<int>("seekFrame", *vars.get<int>("frameNum"));
     ImGui::Selectable("Pause", &vars.getBool("pause"));
     ImGui::End();
     swap();

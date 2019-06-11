@@ -14,11 +14,12 @@ extern "C" {
 class GpuDecoder
 {
     public:
-        std::vector<uint64_t> getFrames(size_t number);
         GpuDecoder(const char* path);
+        std::vector<uint64_t> getFrames(size_t number);
+        void seek(int frameNum);
         //active means the one that is currently being loaded or is now prepared for loading
         int getActiveBufferIndex() {return bufferIndex;}
-        int getLength() {return bestStreamLength;};
+        int getLength() {return formatContext->duration;};
         
     private:
         static constexpr int BUFFER_COUNT{2};
@@ -51,4 +52,5 @@ class GpuDecoder
         AVPixelFormat pixFmt;
         VdpRect flipRect;
         AVPacket packet;
+        
 };

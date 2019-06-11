@@ -20,6 +20,16 @@ void GpuDecoder::recreateBuffer(size_t number)
     ge::gl::glCreateTextures(GL_TEXTURE_2D, number, currentBuffer->textures.data());
 }
 
+void GpuDecoder::seek(int frameNum)
+{
+    AVStream *stream = formatContext->streams[videoStreamId];
+    //uint64_t time = stream->time_base.den * stream->r_frame_rate.den * frameNum / (stream->time_base.num * stream->r_frame_rate.num);
+    if(av_seek_frame(formatContext, videoStreamId, frameNum, AVSEEK_FLAG_BACKWARD | AVSEEK_FLAG_FRAME) < 0)
+        throw std::runtime_error("Cannot seek"); 
+    avcodec_flush_buffers(codecContext);
+    av_read_frame(formatContext, &packet);
+}
+
 //convert as -c:v libx265 -pix_fmt yuv420p (pix fmt, only 420 avaliable for gpu dec)
 std::vector<uint64_t> GpuDecoder::getFrames(size_t number)
 { 
@@ -126,8 +136,6 @@ GpuDecoder::GpuDecoder(const char* path)
 
     if(avcodec_parameters_to_context(codecContext, formatContext->streams[videoStreamId]->codecpar)<0)
         throw std::runtime_error{"Cannot use the file parameters in context"};
-
-    bestStreamLength = formatContext->duration;
 
     const AVCodecHWConfig *config;
     for(int i=0;; i++)
