@@ -20,6 +20,26 @@ void GpuDecoder::recreateBuffer(size_t number)
     ge::gl::glCreateTextures(GL_TEXTURE_2D, number, currentBuffer->textures.data());
 }
 
+void GpuDecoder::recreateBufferLite(size_t number)
+{
+    TextureBuffer *currentBuffer = &buffers[bufferIndex]; 
+    //ge::gl::glVDPAUUnmapSurfacesNV (currentBuffer->nvSurfaces.size(), currentBuffer->nvSurfaces.data());
+    for(auto surface : currentBuffer->nvSurfaces)
+        ge::gl::glVDPAUUnregisterSurfaceNV(surface);
+    /*currentBuffer->nvSurfaces.clear();
+    currentBuffer->nvSurfaces.resize(number);*/
+    for(auto surface : currentBuffer->vdpSurfaces)
+        vdp_output_surface_destroy(surface);
+/*    currentBuffer->vdpSurfaces.clear();
+    currentBuffer->vdpSurfaces.resize(number);*/
+//    currentBuffer->textureHandles.clear();
+//    currentBuffer->textureHandles.resize(number);
+//  ge::gl::glDeleteTextures(currentBuffer->textures.size(), currentBuffer->textures.data());
+    //currentBuffer->textures.clear();
+    //currentBuffer->textures.resize(number);
+    ge::gl::glCreateTextures(GL_TEXTURE_2D, number, currentBuffer->textures.data());
+}
+
 void GpuDecoder::seek(int frameNum)
 {
     AVStream *stream = formatContext->streams[videoStreamId];
@@ -35,7 +55,18 @@ std::vector<uint64_t> GpuDecoder::getFrames(size_t number)
 { 
     swapBuffers();
     //the clearing can be avoided if we specify a fixed amount for getframes when constructing
-    recreateBuffer(number);
+    //recreateBuffer(number);
+    if(number != lastFrameCount)
+    {
+        recreateBuffer(number);
+        swapBuffers();
+        recreateBuffer(number);
+        swapBuffers();
+        lastFrameCount = number;
+    }
+    else
+        recreateBufferLite(number);
+
     TextureBuffer *currentBuffer = getCurrentBuffer(); 
     
     for(int i=0; i<number; i++)
@@ -88,6 +119,7 @@ std::vector<uint64_t> GpuDecoder::getFrames(size_t number)
             if(frame->format == pixFmt)
             {
                 //TODO compare to fragment shader conversion without mixer
+                //TODO pre allocate
                 if(vdp_output_surface_create(vdpauContext->device, VDP_RGBA_FORMAT_B8G8R8A8, codecContext->width, codecContext->height, &currentBuffer->vdpSurfaces[i]) != VDP_STATUS_OK)
                     throw std::runtime_error("Cannot create VDPAU output surface.");
                 if(vdp_video_mixer_render(mixer, VDP_INVALID_HANDLE, nullptr, VDP_VIDEO_MIXER_PICTURE_STRUCTURE_FRAME, 0, nullptr, (VdpVideoSurface)(uintptr_t)frame->data[3], 0, nullptr, &flipRect, currentBuffer->vdpSurfaces[i], nullptr, nullptr, 0, nullptr) != VDP_STATUS_OK)

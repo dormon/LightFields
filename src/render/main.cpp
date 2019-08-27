@@ -234,15 +234,15 @@ void LightFields::init()
     vars.addFloat("camera.fovy",glm::half_pi<float>());
     vars.addFloat("camera.near",.1f);
     vars.addFloat("camera.far",1000.f);
-    vars.addFloat("scale",1.f);
+    vars.addFloat("scale",370.f);
     vars.addFloat("z",0.f);
     vars.addUint32("kernel",1);
-    vars.addBool("depth",true);
+    vars.addBool("depth",false);
     vars.addBool("printStats",false);
     vars.add<std::map<SDL_Keycode, bool>>("input.keyDown");
     vars.addFloat("xSelect",0.f);
     vars.addFloat("ySelect",0.f);
-    vars.addFloat("focusDistance",1.f);
+    vars.addFloat("focusDistance",200.f);
     vars.addUint32("mode",2);
     vars.addUint32("frame",0);
     createProgram(vars);
@@ -350,12 +350,13 @@ void LightFields::draw()
         vars.getBool("printStats") = false;
     }
     
-    //drawImguiVars(vars);
+    drawImguiVars(vars);
     //ImGui::LabelText("freeMemory","%i MB",nCurAvailMemoryInKB / 1024);
     ImGui::Begin("Playback");
     if(ImGui::SliderInt("Timeline", vars.get<int>("frameNum"), 1, vars.getUint32("length")))
         vars.reCreate<int>("seekFrame", *vars.get<int>("frameNum"));
     ImGui::Selectable("Pause", &vars.getBool("pause"));
+    ImGui::DragFloat("Focus", &vars.getFloat("z"));
     ImGui::End();
     swap();
 

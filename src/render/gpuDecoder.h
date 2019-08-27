@@ -34,9 +34,11 @@ class GpuDecoder
         TextureBuffer* getCurrentBuffer() {return &buffers[bufferIndex];};
         void swapBuffers() {bufferIndex ^= 1;}; //(bufferIndex+1)%BUFFER_COUNT;};
         void recreateBuffer(size_t number);
+        void recreateBufferLite(size_t number);
 
         int bufferIndex{0};
         int bestStreamLength{0};
+        int lastFrameCount{0};
         AVFormatContext *formatContext;    
         AVCodec *codec;
         AVCodecContext *codecContext;
