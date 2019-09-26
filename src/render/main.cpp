@@ -16,6 +16,7 @@
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <SDL2CPP/Exception.h>
+#include <Timer.h>
 
 #include <gpuDecoder.h>
 
@@ -25,6 +26,8 @@
 #include<thread>
 #include<mutex>
 #include<condition_variable>
+
+constexpr float FRAME_LIMIT = 1.0f/24;
 
 namespace fs = std::experimental::filesystem;
 
@@ -184,7 +187,6 @@ void asyncVideoLoading(vars::Vars &vars)
             std::string nextTexturesName = "lfTextures" + std::to_string(index);
             //TODO id this copy deep?
             vars.reCreateVector<GLuint64>(nextTexturesName, decoder->getFrames(64));
-            
             GLsync fence = ge::gl::glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0);
             ge::gl::glClientWaitSync(fence, GL_SYNC_FLUSH_COMMANDS_BIT, 9999999);
         
@@ -236,7 +238,7 @@ void LightFields::init()
     vars.addFloat("camera.far",1000.f);
     vars.addFloat("scale",370.f);
     vars.addFloat("z",0.f);
-    vars.addUint32("kernel",1);
+    //vars.addUint32("kernel",1);
     vars.addBool("depth",false);
     vars.addBool("printStats",false);
     vars.add<std::map<SDL_Keycode, bool>>("input.keyDown");
@@ -261,13 +263,15 @@ void LightFields::init()
 
 void LightFields::draw()
 {
+    ge::gl::glFinish();
+    auto timer = vars.addOrGet<Timer<double>>("timer");
+    timer->reset();
+    
     std::string currentTexturesName = "lfTextures" + std::to_string(vars.getUint32("lfTexturesIndex"));
     
     std::vector<GLuint64> t = vars.getVector<GLuint64>(currentTexturesName);
     for(auto a : t)
        	ge::gl::glMakeTextureHandleResidentARB(a);
-    
-    auto start = std::chrono::steady_clock::now();
 
     createCamera(vars);
     auto view = vars.getReinterpret<basicCamera::CameraTransform>("view");
@@ -290,7 +294,7 @@ void LightFields::draw()
     //->set1f("far",vars.getFloat("camera.far"))
     ->set1f("scale",vars.getFloat("scale"))
     ->set1f("z",vars.getFloat("z"))
-    ->set1i("kernel",vars.getUint32("kernel"))
+    //->set1i("kernel",vars.getUint32("kernel"))
     ->set1f("focusDistance",vars.getFloat("focusDistance"))
     ->set1i("mode",vars.getBool("mode"))
     ->set1i("frame",vars.getUint32("frame"))
@@ -356,7 +360,7 @@ void LightFields::draw()
     if(ImGui::SliderInt("Timeline", vars.get<int>("frameNum"), 1, vars.getUint32("length")))
         vars.reCreate<int>("seekFrame", *vars.get<int>("frameNum"));
     ImGui::Selectable("Pause", &vars.getBool("pause"));
-    ImGui::DragFloat("Focus", &vars.getFloat("z"));
+    ImGui::DragFloat("Focus", &vars.getFloat("z"),0.001f);
     ImGui::End();
     swap();
 
@@ -375,14 +379,15 @@ void LightFields::draw()
     }
     vars.getBool("loaded") = false;
 
+    ge::gl::glFinish();
+    auto time = vars.get<Timer<double>>("timer")->elapsedFromStart();
+    vars.addOrGetFloat("elapsed") = time;
+    //std::cerr << time << std::endl;
+    if(time > FRAME_LIMIT)
+        std::cerr << "Lag" << std::endl;
+    else
+        std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<long>((FRAME_LIMIT-time)*1000))); 
 
-/*
-    auto end = std::chrono::steady_clock::now();
-    constexpr int frameTime = 41;
-    int left = frameTime - std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-    if(left > 0)
-       std::this_thread::sleep_for(std::chrono::milliseconds(left));
-    vars.getUint32("frame") += (vars.getUint32("frame") == 19) ? -19 : 1; */
 }
 
 void LightFields::key(SDL_Event const& event, bool DOWN)

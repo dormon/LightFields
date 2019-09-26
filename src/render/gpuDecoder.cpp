@@ -109,9 +109,10 @@ std::vector<uint64_t> GpuDecoder::getFrames(size_t number)
                     avio_seek(formatContext->pb, 0, SEEK_SET);
                 //avformat_seek_file(formatContext, videoStreamId, 0, 0, stream->duration, 0);*/
                 //                avcodec_flush_buffers(codecContext);
-                av_seek_frame(formatContext, videoStreamId, 0, 0);
+                /*av_seek_frame(formatContext, videoStreamId, 0, 0);
                 avcodec_flush_buffers(codecContext);
-                av_read_frame(formatContext, &packet);
+                av_read_frame(formatContext, &packet);*/
+                seek(0);
                 std::cerr<<"END";
                 //waitForFrame = false;
                 break;
@@ -130,7 +131,7 @@ std::vector<uint64_t> GpuDecoder::getFrames(size_t number)
                 ge::gl::glVDPAUMapSurfacesNV (1, &currentBuffer->nvSurfaces[i]);
 
                 currentBuffer->textureHandles[i] = ge::gl::glGetTextureHandleARB(currentBuffer->textures[i]);
-                ge::gl::glMakeTextureHandleResidentARB(currentBuffer->textureHandles[i]);
+                //ge::gl::glMakeTextureHandleResidentARB(currentBuffer->textureHandles[i]);
 
                 waitForFrame = false;
                 //std::cerr << i << " ";

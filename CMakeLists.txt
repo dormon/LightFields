@@ -13,6 +13,8 @@ set(REVISION_VERSION 0)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/CMakeModules")
 
+set(INCLUDES src/render/Timer.h)
+
 find_package(ArgumentViewer 1.0 CONFIG REQUIRED)
 find_package(BasicCamera 1.0 CONFIG REQUIRED)
 find_package(Simple3DApp 1.0.0 CONFIG REQUIRED)
