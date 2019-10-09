@@ -193,37 +193,6 @@ float deltaE2000( vec3 bgr1, vec3 bgr2 )
 }
 //vec3 rgb2lab(vec3 c) {return c;}
 
-vec4 dilate(int slice, int kernel, vec2 coords)
-{
-    const float DELTA = 0.001;
-    vec4 color = vec4(0);
-    for (int x=-kernel; x<=kernel; x++)
-        for (int y=-kernel; y<=kernel; y++)
-            color = max(color,texture(lfTextures[slice],coords+vec2(x,y)*DELTA));
-    return color;
-}
-
-vec4 erode(int slice, int kernel, vec2 coords)
-{
-    const float DELTA = 0.001;
-    vec4 color = vec4(9999999);
-    for (int x=-kernel; x<=kernel; x++)
-        for (int y=-kernel; y<=kernel; y++)
-            color = min(color,texture(lfTextures[slice],coords+vec2(x,y)*DELTA));
-    return color;
-}
-
-vec4 blurSample(int slice, int kernel, vec2 coords)
-{
-    const float DELTA = 0.001;
-    vec4 color = vec4(0);
-    for (int x=-kernel; x<=kernel; x++)
-        for (int y=-kernel; y<=kernel; y++)
-            color += texture(lfTextures[slice],coords+vec2(x,y)*DELTA);
-
-    return color/pow((2*kernel+1),2);
-}
-
 void main()
 {
     vec4 c = vec4(0);
@@ -281,7 +250,7 @@ void main()
             vec2 texCoord[4] = {vCoord, vCoord, vCoord, vCoord};
 
 const float searchDelta = 0.001;
-const int searchIterations = 50;
+const int searchIterations = 100;
 vec4 cols[searchIterations];
 float znn = zn;
 int s = (depth==1) ? 1 : searchIterations;
@@ -340,23 +309,23 @@ for(int i=1;i<s;i++)
         d = cols[i].w;
         c = vec4(cols[i].xyz,1.0);
     }
-/*if(d>9.5)
-    c= vec4(1.0,0.0,0.0,1.0);*/
-
+/*if(d>10.5)
+    c= vec4(1.0);*/
 }
      else if(mode == 3)
         {
 
-const float searchDelta = 0.05;
-const int searchIterations = 10;
+const float searchDelta = 100.01;
+const int searchIterations = 20;
 vec4 cols[searchIterations];
 float znn = zn;
 int s = (depth==1) ? 1 : searchIterations;
 for(int j=0; j<s; j++)
 {
-zn=znn+(1.0-2*(j%2))*searchDelta*(j/2);
+znn=zn+(1.0-2*(j%2))*searchDelta*(j/2);
 vec3 colors[64];
 vec3 summ = vec3(0.0);
+
 
             float maxDistance = distance(vec2(0,0), vec2(gridSize.x-1, gridSize.y-1));
             float sum = 0;
@@ -366,10 +335,10 @@ vec3 summ = vec3(0.0);
                 {      
                     float distance = maxDistance-distance(vec2(xSel, ySel), vec2(x,y));
                     sum += distance; 
-                    //int slice = (gridIndex.y-y)*int(gridSize.x)+x;
-                    int slice = y*int(gridSize.x)+x;
-                    vec2 texCoord = intersCoord+(vec2(xSel,ySel)-vec2(x,y))*(zn/(1.0-zn));
-                    texCoord += 0.5*scale;
+                    int slice = (gridIndex.y-y)*int(gridSize.x)+x;
+                    vec2 texCoord = intersCoord+(vec2(xSel,ySel)-vec2(x,y))*(znn/(1.0-znn));
+                    texCoord.x += 0.5*scale;
+                    texCoord.y += 0.5*scale;
                     texCoord /= scale;
                     float weight = distance;//1.0/64;
 colors[slice] = (texture(lfTextures[slice], texCoord).xyz);
@@ -401,88 +370,29 @@ for(int i=1;i<s;i++)
         } 
 
         else
-        { 
-
- 
-vec3 camPos = (inverse(view)*vec4(0,0,0,1)).xyz;
-vec3 centerRay = normalize(vec3(0,0,0) - camPos);
-float range = .2;
-float coox = (clamp(centerRay.x*-1,-range*aspect,range*aspect)/(range*aspect)+1)/2.;
-float cooy = (clamp(centerRay.y,-range,range)/range+1)/2.;
-vec2 sel = vec2(clamp(coox*(gridIndex.x),0,gridIndex.x),clamp(cooy*(gridIndex.y),0,gridIndex.y));
-sel = vec2(3,3);
-//30 0.04 -0.5
-float v=999999, vr=999999, bestZ=0; 
-vec4 color, colorReal;
-const int iterations = (depth==1) ? 30 : 1;
-const float delta = 0.023;
-const float start = 0.1;
-const int kernelStep = (depth==1) ? 2 : 1;
-const int stepCount = (depth==1) ? 2 : 1;
-float zt=0;
-//TODO reference to one picture (center), choose as main color -> depth
-const float INVALID_COLOR = 999.9;
-const float NULL_DELTA = 0.0000001;
-const float MAX_DISTANCE = sqrt(2*pow(7,2));
-for(int i=0; i<iterations*stepCount;i++)
-{
-int kernel = kernelStep*(i/iterations);
-c=vec4(0);
-vec4 cr = vec4(0);
-float zz = (depth==1) ? (start + (i%iterations)*delta) : z; 
-            vec4 colors[64];
-            vec4 colorsReal[64];
-            float var=0, varReal=0;
-            uint size = 0;
-            //TODO odd number of images
-            //TODO compute shader paralelize
-            float totalDist = 0;
+        {   
+            vec4 ref = vec4(0);
+            c = vec4(0);
+            float maxDistance = gridSize.x-1;
+            float sum = 0;
+            ivec2 closest = ivec2(round(vec2(xSel, ySel)));
             for(int x=0; x<gridSize.x; x++)
-                for(int y=0; y<gridSize.y; y++)
-                { 
-                    const float power = 0.7;
-                    //-1/(MD^p)*x^p+1
-                    float dist = (-1.0/pow(MAX_DISTANCE,power))*pow(distance(sel,vec2(x,y)),power)+1.0+NULL_DELTA;
-                    int slice = y*int(gridSize.x)+x;
-                    ivec2 offset = ivec2(gridIndex.x-2*x, gridIndex.y-2*y);
-                    offset.y *=-1;
-                    vec2 focusedCoords = vCoord+offset*zz*0.01*vec2(1.0,aspect);
-                    if(dist < 0.5) focusedCoords.x =100000; 
-                    if(all(greaterThan(focusedCoords,vec2(0,0))) && all(lessThan(focusedCoords,vec2(1.0+NULL_DELTA))))
-                    {
-                        colors[slice] = blurSample(slice,kernel,focusedCoords);
-                        c+=colors[slice]*dist;
-                        colorsReal[slice] = texture(lfTextures[slice],focusedCoords);
-                        cr += colorsReal[slice]*dist;
-                        totalDist += dist;
-                    }
-                    else
-                        colors[slice].w = INVALID_COLOR; 
-                }  
-                c /= totalDist;
-                cr /= totalDist;
-                vec4 refColor = texture(lfTextures[3*int(gridSize.x)+3],vCoord);
-                for(int j=0;j<64;j++)
-                {
-                   if(colors[j].w == INVALID_COLOR) continue;
-                   var += deltaE2000/*distance*/(colors[j].xyz, refColor.xyz);//c.xyz);
-                   varReal += deltaE2000/*distance*/(colorsReal[j].xyz, refColor.xyz);//cr.xyz);
-                }
-                var/=totalDist;
-                varReal/=totalDist;
-if(var<v)
-{v=var; color=cr;}
-if(varReal<vr)
-{vr=varReal; colorReal=cr; bestZ = start + (i%iterations)*delta;}
-}
-/*v/=70.0;
-vr/=70.0;
-c=vec4(v,v,v,1.0);*/
-c=(v<vr) ? color : colorReal;
-//c=colorReal;
-//c = vec4(vec3(bestZ),1.0);
-//c = texture(lfTextures[3*int(gridSize.x)+3],vCoord);
-        }  
+            {
+                float distance = abs(closest.x-x);
+                int slice = (gridIndex.y-closest.y)*int(gridSize.x)+x;
+                vec2 texCoord = intersCoord+(vec2(closest.x,closest.y)-vec2(x,0))*(zn/(1.0-zn));
+                texCoord.x += 0.5*scale;
+                texCoord.y += 0.5*scale;
+                texCoord /= scale;
+               
+                float weight = maxDistance-distance;
+                sum += weight;
+                c += texture(lfTextures[slice],texCoord)*weight;
+            }
+                c/=sum;
+        }
+  
+
 }
     fColor = c;
 }

@@ -20,6 +20,9 @@ class GpuDecoder
         //active means the one that is currently being loaded or is now prepared for loading
         int getActiveBufferIndex() {return bufferIndex;}
         int getLength() {return formatContext->duration;};
+        int getWidth() {return codecContext->width;};
+        int getHeight() {return codecContext->height;};
+        float getAspect() {return static_cast<float>(codecContext->width)/codecContext->height;};
         
     private:
         static constexpr int BUFFER_COUNT{2};

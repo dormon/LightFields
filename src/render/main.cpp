@@ -28,6 +28,7 @@
 #include<condition_variable>
 
 constexpr float FRAME_LIMIT = 1.0f/24;
+constexpr bool SCREENSHOT_MODE = 1;
 
 namespace fs = std::experimental::filesystem;
 
@@ -116,9 +117,9 @@ void createCamera(vars::Vars&vars)
 void loadTextures(vars::Vars&vars)
 { 
     uint32_t size = 8;
-    vars.addUint32("lf.width", 1920);
+    /*vars.addUint32("lf.width", 1920);
     vars.addUint32("lf.height", 1080);
-    vars.addFloat("texture.aspect",1920.0/1080.0);
+    vars.addFloat("texture.aspect",1920.0/1080.0);*/
     //TODO get from container
     vars.add<glm::uvec2>("gridSize",glm::uvec2(static_cast<unsigned int>(size)));
 	//loadLfImage(vars, "../data/dummy", true);
@@ -161,6 +162,9 @@ void asyncVideoLoading(vars::Vars &vars)
 
     auto decoder = std::make_unique<GpuDecoder>( "../data/video.mkv");
     //TODO get info from mkv about cams
+    vars.reCreate<unsigned int>("lf.width",decoder->getWidth());
+    vars.reCreate<unsigned int>("lf.height", decoder->getHeight());
+    vars.reCreate<float>("texture.aspect",decoder->getAspect());
     auto length = vars.addUint32("length",static_cast<int>(decoder->getLength()/64000000.0*25));
   
     auto rdyMutex = vars.get<std::mutex>("rdyMutex");
@@ -195,6 +199,8 @@ void asyncVideoLoading(vars::Vars &vars)
             //TODO without waiting? async draw to increase responsitivity
             frameNum++;
             vars.reCreate<int>("frameNum", frameNum);
+        
+            vars.getBool("pause") = true;
         }
         //TODO sleep according to FPS
         vars.getBool("loaded") = true; 
@@ -210,6 +216,7 @@ void LightFields::init()
     vars.add<SDL_Window*>("mainWindow", window->getWindow());
     SDL_GL_SetAttribute(SDL_GL_SHARE_WITH_CURRENT_CONTEXT, 1);  
     
+    SDL_SetWindowSize(window->getWindow(),/*640,360)/*/1920,1080);
     vars.addBool("mainRuns", true);
     vars.addBool("pause", false);
     vars.add<int>("seekFrame", -1);
@@ -239,13 +246,13 @@ void LightFields::init()
     vars.addFloat("scale",370.f);
     vars.addFloat("z",0.f);
     //vars.addUint32("kernel",1);
-    vars.addBool("depth",false);
+    vars.addBool("depth",(SCREENSHOT_MODE) ? true : false);
     vars.addBool("printStats",false);
     vars.add<std::map<SDL_Keycode, bool>>("input.keyDown");
     vars.addFloat("xSelect",0.f);
     vars.addFloat("ySelect",0.f);
     vars.addFloat("focusDistance",200.f);
-    vars.addUint32("mode",2);
+    vars.addUint32("mode",4);
     vars.addUint32("frame",0);
     createProgram(vars);
     createCamera(vars);
@@ -259,6 +266,43 @@ void LightFields::init()
     stats->bindBase(GL_SHADER_STORAGE_BUFFER, 2);
     
     ge::gl::glEnable(GL_DEPTH_TEST);
+}
+
+SDL_Surface* flipSurface(SDL_Surface* sfc) {
+     SDL_Surface* result = SDL_CreateRGBSurface(sfc->flags, sfc->w, sfc->h,
+         sfc->format->BytesPerPixel * 8, sfc->format->Rmask, sfc->format->Gmask,
+         sfc->format->Bmask, sfc->format->Amask);
+     const auto pitch = sfc->pitch;
+     const auto pxlength = pitch*(sfc->h - 1);
+     auto pixels = static_cast<unsigned char*>(sfc->pixels) + pxlength;
+     auto rpixels = static_cast<unsigned char*>(result->pixels) ;
+     for(auto line = 0; line < sfc->h; ++line) {
+         memcpy(rpixels,pixels,pitch);
+         pixels -= pitch;
+         rpixels += pitch;
+     }
+     return result;
+}
+
+void screenShot(std::string filename, int w, int h)
+{
+#if SDL_BYTEORDER == SDL_BIG_ENDIAN
+    Uint32 rmask = 0xff000000;
+    Uint32 gmask = 0x00ff0000;
+    Uint32 bmask = 0x0000ff00;
+    Uint32 amask = 0x000000ff;  
+#else
+    Uint32 rmask = 0x000000ff;
+    Uint32 gmask = 0x0000ff00;
+    Uint32 bmask = 0x00ff0000;
+    Uint32 amask = 0xff000000;
+#endif
+    SDL_Surface *ss = SDL_CreateRGBSurface(0, w, h, 24, rmask, gmask, bmask, amask);
+    ge::gl::glReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, ss->pixels);
+    SDL_Surface *s = flipSurface(ss);
+    SDL_SaveBMP(s, filename.c_str());
+    SDL_FreeSurface(s); 
+    SDL_FreeSurface(ss); 
 }
 
 void LightFields::draw()
@@ -366,7 +410,6 @@ void LightFields::draw()
 
     GLsync fence = ge::gl::glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE,0);
     ge::gl::glClientWaitSync(fence, GL_SYNC_FLUSH_COMMANDS_BIT, 9999999);
-
     
     for(auto a : t)
        	ge::gl::glMakeTextureHandleNonResidentARB(a);
@@ -387,7 +430,13 @@ void LightFields::draw()
         std::cerr << "Lag" << std::endl;
     else
         std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<long>((FRAME_LIMIT-time)*1000))); 
-
+    
+    if constexpr (SCREENSHOT_MODE)
+    {
+        vars.getBool("mainRuns") = false;
+        screenShot("shot.bmp", window->getWidth(), window->getHeight());
+        exit(0);
+    }
 }
 
 void LightFields::key(SDL_Event const& event, bool DOWN)
