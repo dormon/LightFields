@@ -29,6 +29,7 @@
 
 constexpr float FRAME_LIMIT = 1.0f/24;
 constexpr bool SCREENSHOT_MODE = 1;
+constexpr bool SCREENSHOT_VIDEO = 0;
 
 namespace fs = std::experimental::filesystem;
 
@@ -433,9 +434,16 @@ void LightFields::draw()
     
     if constexpr (SCREENSHOT_MODE)
     {
-        vars.getBool("mainRuns") = false;
-        screenShot("shot.bmp", window->getWidth(), window->getHeight());
-        exit(0);
+        static int a=0;
+        a++;
+        vars.reCreate<float>("xSelect",0.1*a);
+        screenShot(std::to_string(a)+"shot.bmp", window->getWidth(), window->getHeight());
+        if(!SCREENSHOT_VIDEO || 0.1*a > 7.0)
+        {
+            vars.reCreate<float>("xSelect",3.5);
+            vars.getBool("mainRuns") = false;
+            exit(0);
+        }
     }
 }
 

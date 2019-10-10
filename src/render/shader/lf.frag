@@ -410,13 +410,13 @@ float range = .2;
 float coox = (clamp(centerRay.x*-1,-range*aspect,range*aspect)/(range*aspect)+1)/2.;
 float cooy = (clamp(centerRay.y,-range,range)/range+1)/2.;
 vec2 sel = vec2(clamp(coox*(gridIndex.x),0,gridIndex.x),clamp(cooy*(gridIndex.y),0,gridIndex.y));
-sel = vec2(3,3);
-//30 0.04 -0.5
+sel = vec2(xSelect,3.5);
+//30 0.045 0.15
 float v=999999, vr=999999, bestZ=0; 
 vec4 color, colorReal;
-const int iterations = (depth==1) ? 30 : 1;
-const float delta = 0.023;
-const float start = 0.1;
+const int iterations = (depth==1) ? 40 : 1;
+const float delta = 0.0825;
+const float start = -1.0;
 const int kernelStep = (depth==1) ? 2 : 1;
 const int stepCount = (depth==1) ? 2 : 1;
 float zt=0;
@@ -440,14 +440,14 @@ float zz = (depth==1) ? (start + (i%iterations)*delta) : z;
             for(int x=0; x<gridSize.x; x++)
                 for(int y=0; y<gridSize.y; y++)
                 { 
-                    const float power = 0.7;
+                    const float power = 0.3;
                     //-1/(MD^p)*x^p+1
                     float dist = (-1.0/pow(MAX_DISTANCE,power))*pow(distance(sel,vec2(x,y)),power)+1.0+NULL_DELTA;
                     int slice = y*int(gridSize.x)+x;
-                    ivec2 offset = ivec2(gridIndex.x-2*x, gridIndex.y-2*y);
+                    vec2 offset = sel-vec2(x,y);
                     offset.y *=-1;
                     vec2 focusedCoords = vCoord+offset*zz*0.01*vec2(1.0,aspect);
-                    if(dist < 0.5) focusedCoords.x =100000; 
+                    if(dist < 0.4) focusedCoords.x =100000; 
                     if(all(greaterThan(focusedCoords,vec2(0,0))) && all(lessThan(focusedCoords,vec2(1.0+NULL_DELTA))))
                     {
                         colors[slice] = blurSample(slice,kernel,focusedCoords);
@@ -461,19 +461,19 @@ float zz = (depth==1) ? (start + (i%iterations)*delta) : z;
                 }  
                 c /= totalDist;
                 cr /= totalDist;
-                vec4 refColor = texture(lfTextures[3*int(gridSize.x)+3],vCoord);
+                //vec4 refColor = texture(lfTextures[3*int(gridSize.x)+3],vCoord);
                 for(int j=0;j<64;j++)
                 {
                    if(colors[j].w == INVALID_COLOR) continue;
-                   var += deltaE2000/*distance*/(colors[j].xyz, refColor.xyz);//c.xyz);
-                   varReal += deltaE2000/*distance*/(colorsReal[j].xyz, refColor.xyz);//cr.xyz);
+                   var += deltaE2000/*distance*/(colors[j].xyz, /*refColor.xyz);/*/c.xyz);
+                   varReal += deltaE2000/*distance*/(colorsReal[j].xyz, /*refColor.xyz);/*/cr.xyz);
                 }
                 var/=totalDist;
                 varReal/=totalDist;
 if(var<v)
-{v=var; color=cr;}
+{v=var; color=cr;bestZ = (start + (i%iterations)*delta - start)/3.3;}
 if(varReal<vr)
-{vr=varReal; colorReal=cr; bestZ = start + (i%iterations)*delta;}
+{vr=varReal; colorReal=cr;}//bestZ = start + (i%iterations)*delta;}
 }
 /*v/=70.0;
 vr/=70.0;
