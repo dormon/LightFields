@@ -412,6 +412,7 @@ float cooy = (clamp(centerRay.y,-range,range)/range+1)/2.;
 vec2 sel = vec2(clamp(coox*(gridIndex.x),0,gridIndex.x),clamp(cooy*(gridIndex.y),0,gridIndex.y));
 sel = vec2(xSelect,3.5);
 //30 0.045 0.15
+
 float v=999999, vr=999999, bestZ=0; 
 vec4 color, colorReal;
 const int iterations = (depth==1) ? 40 : 1;
@@ -420,7 +421,6 @@ const float start = -1.0;
 const int kernelStep = (depth==1) ? 2 : 1;
 const int stepCount = (depth==1) ? 2 : 1;
 float zt=0;
-//TODO reference to one picture (center), choose as main color -> depth
 const float INVALID_COLOR = 999.9;
 const float NULL_DELTA = 0.0000001;
 const float MAX_DISTANCE = sqrt(2*pow(7,2));
@@ -436,6 +436,8 @@ float zz = (depth==1) ? (start + (i%iterations)*delta) : z;
             uint size = 0;
             //TODO odd number of images
             //TODO compute shader paralelize
+            //TODO precomputed blur
+            //TODO downsample disparity, smaller and interpolate rest
             float totalDist = 0;
             for(int x=0; x<gridSize.x; x++)
                 for(int y=0; y<gridSize.y; y++)
@@ -461,12 +463,11 @@ float zz = (depth==1) ? (start + (i%iterations)*delta) : z;
                 }  
                 c /= totalDist;
                 cr /= totalDist;
-                //vec4 refColor = texture(lfTextures[3*int(gridSize.x)+3],vCoord);
                 for(int j=0;j<64;j++)
                 {
                    if(colors[j].w == INVALID_COLOR) continue;
-                   var += deltaE2000/*distance*/(colors[j].xyz, /*refColor.xyz);/*/c.xyz);
-                   varReal += deltaE2000/*distance*/(colorsReal[j].xyz, /*refColor.xyz);/*/cr.xyz);
+                   var += deltaE2000/*distance*/(colors[j].xyz, c.xyz);
+                   varReal += deltaE2000/*distance*/(colorsReal[j].xyz, cr.xyz);
                 }
                 var/=totalDist;
                 varReal/=totalDist;
@@ -481,7 +482,6 @@ c=vec4(v,v,v,1.0);*/
 c=(v<vr) ? color : colorReal;
 //c=colorReal;
 //c = vec4(vec3(bestZ),1.0);
-//c = texture(lfTextures[3*int(gridSize.x)+3],vCoord);
         }  
 }
     fColor = c;

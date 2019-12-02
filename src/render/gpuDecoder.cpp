@@ -29,15 +29,15 @@ void GpuDecoder::recreateBufferLite(size_t number)
     //ge::gl::glVDPAUUnmapSurfacesNV (currentBuffer->nvSurfaces.size(), currentBuffer->nvSurfaces.data());
     for(auto surface : currentBuffer->nvSurfaces)
         ge::gl::glVDPAUUnregisterSurfaceNV(surface);
-    /*currentBuffer->nvSurfaces.clear();
-      currentBuffer->nvSurfaces.resize(number);*/
-    /*for(auto surface : currentBuffer->vdpSurfaces)
-      vdp_output_surface_destroy(surface);*/
-    /*    currentBuffer->vdpSurfaces.clear();
-          currentBuffer->vdpSurfaces.resize(number);*/
-    //    currentBuffer->textureHandles.clear();
-    //    currentBuffer->textureHandles.resize(number);
-    //  ge::gl::glDeleteTextures(currentBuffer->textures.size(), currentBuffer->textures.data());
+/*    currentBuffer->nvSurfaces.clear();
+      currentBuffer->nvSurfaces.resize(number);
+    for(auto surface : currentBuffer->vdpSurfaces)
+      vdp_output_surface_destroy(surface);
+        currentBuffer->vdpSurfaces.clear();
+          currentBuffer->vdpSurfaces.resize(number);
+        currentBuffer->textureHandles.clear();
+        currentBuffer->textureHandles.resize(number);*/
+    //ge::gl::glDeleteTextures(currentBuffer->textures.size(), currentBuffer->textures.data());
     //currentBuffer->textures.clear();
     //currentBuffer->textures.resize(number);
     ge::gl::glCreateTextures(GL_TEXTURE_2D, number, currentBuffer->textures.data());

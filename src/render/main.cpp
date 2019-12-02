@@ -28,7 +28,7 @@
 #include<condition_variable>
 
 constexpr float FRAME_LIMIT = 1.0f/24;
-constexpr bool SCREENSHOT_MODE = 1;
+constexpr bool SCREENSHOT_MODE = 0;
 constexpr bool SCREENSHOT_VIDEO = 0;
 
 namespace fs = std::experimental::filesystem;
